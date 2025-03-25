@@ -1,7 +1,8 @@
 use avian3d::prelude::{Collider, ShapeCastConfig, SpatialQuery, SpatialQueryFilter};
 use bevy::prelude::*;
+use bevy_renet::renet::ClientId;
 
-use crate::components::{Character, LocallyControlled, RemoteControlled, Velocity, WishDirection};
+use crate::{components::{Character, LocallyControlled, ReplicatedEntity, RemoteControlled, Velocity, WishDirection}, net::{DespawnCharacterEvent, EntityNetId, SpawnCharacterEvent}};
 
 use super::shared::GameState;
 
@@ -9,14 +10,47 @@ pub struct CharacterPlugin;
 
 impl Plugin for CharacterPlugin {
     fn build(&self, app: &mut App) {
+        app.add_event::<SpawnCharacterEvent>();
+        app.add_event::<DespawnCharacterEvent>();
         app.add_systems(FixedUpdate, 
             (
+                spawn_character_system,
+                despawn_character_system,
                 update_velocity_system,
                 move_character_system
             )
             .chain()
             .run_if(in_state(GameState::Playing))
         );
+    }
+}
+
+fn spawn_character_system(
+    mut commands: Commands,
+    mut spawn_character_event_reader: EventReader<SpawnCharacterEvent>,
+) {
+    for event in spawn_character_event_reader.read() {
+        spawn_character(
+            &mut commands, 
+            event.position, 
+            event.is_local, 
+            event.net_id, 
+            event.client_id
+        );
+    }
+}
+
+fn despawn_character_system(
+    mut commands: Commands,
+    mut despawn_character_event_reader: EventReader<DespawnCharacterEvent>,
+    query: Query<(Entity, &ReplicatedEntity), With<Character>>,
+) {
+    for event in despawn_character_event_reader.read() {
+        for (entity, net_id) in query.iter() {
+            if net_id.net_id == event.net_id {
+                despawn_character(&mut commands, entity);
+            }
+        }
     }
 }
 
@@ -28,7 +62,7 @@ fn update_velocity_system(
         velocity.0 = apply_friction(
             velocity.0, 
             velocity.0.length(), 
-            10.0, 
+            5.0, 
             fixed_time.delta_secs()
         );
 
@@ -45,10 +79,16 @@ fn update_velocity_system(
 fn move_character_system(
     fixed_time: Res<Time<Fixed>>,
     spatial_query: SpatialQuery,
-    mut query: Query<(Entity,&mut Transform, &mut Velocity), With<Character>>,
+    mut query: Query<(Entity, &mut Transform, &mut Velocity), With<Character>>,
 ) {
     for (entity, mut transform, mut velocity) in query.iter_mut() {
-        move_character(&fixed_time, entity, &mut transform, &mut velocity, &spatial_query);
+        move_character(
+            &fixed_time, 
+            entity, 
+            &mut transform, 
+            &mut velocity, 
+            &spatial_query
+        );
     }
 }
 
@@ -102,9 +142,15 @@ pub fn spawn_character(
     commands: &mut Commands,
     position: Vec3,
     is_local: bool,
+    net_id: EntityNetId,
+    owner_client_id: ClientId,
 ) {
-    // visuals are spawned in the shell app
+    // visuals are spawned in the shell
     let new_entity = commands.spawn((
+        ReplicatedEntity {
+            net_id,
+            owner_client_id,
+        },
         Character,
         Velocity(Vec3::ZERO),
         WishDirection(Vec3::ZERO),
@@ -117,6 +163,13 @@ pub fn spawn_character(
     } else {
         commands.entity(new_entity).insert(RemoteControlled);
     }
+}
+
+fn despawn_character(
+    commands: &mut Commands,
+    id: Entity,
+) {
+    commands.entity(id).despawn_recursive();
 }
 
 ////////////////////////////////////////////////////////

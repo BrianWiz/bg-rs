@@ -1,23 +1,21 @@
-use core::components::{Character, LocallyControlled, WishDirection};
+use core::{components::{Character, LocallyControlled}};
 
 use bevy::{prelude::*, window::PrimaryWindow};
 
-const CAMERA_Y_OFFSET: f32 = 5.0;
-pub struct ClientPlugin;
+const CAMERA_Y_OFFSET: f32 = 6.0;
 
-impl Plugin for ClientPlugin {
+pub struct PlayerPlugin;
+
+impl Plugin for PlayerPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Startup, setup_client_system);
-        app.add_systems(FixedPreUpdate, (
-            controls_system,
-            visuals_system,
-        ));
+        app.add_systems(Startup, setup_player_system);
+        app.add_systems(FixedPreUpdate, spawn_visuals_system);
         app.add_systems(Update, camera_follow_system);
     }
 }
 
-fn setup_client_system(mut commands: Commands) {
-    // spawn camera
+fn setup_player_system(mut commands: Commands) {
+    // spawn camera looking down
     commands.spawn((
         Camera3d::default(),
         Projection::Perspective(PerspectiveProjection {
@@ -26,33 +24,12 @@ fn setup_client_system(mut commands: Commands) {
         }),
         Transform::default()
             .with_translation(Vec3::new(0.0, CAMERA_Y_OFFSET, 0.0))
+            // look down
             .with_rotation(Quat::from_rotation_x(-std::f32::consts::PI * 0.5)),
     ));
 }
 
-fn controls_system(
-    keyboard_input: Res<ButtonInput<KeyCode>>,
-    mut query: Query<&mut WishDirection, With<LocallyControlled>>,
-) {
-    for mut wish_direction in query.iter_mut() {
-        wish_direction.0 = Vec3::ZERO;
-        if keyboard_input.pressed(KeyCode::KeyW) {
-            wish_direction.0 += Vec3::NEG_Z;
-        }
-        if keyboard_input.pressed(KeyCode::KeyS) {
-            wish_direction.0 += Vec3::Z;
-        }
-        if keyboard_input.pressed(KeyCode::KeyA) {
-            wish_direction.0 += Vec3::NEG_X;
-        }
-        if keyboard_input.pressed(KeyCode::KeyD) {
-            wish_direction.0 += Vec3::X;
-        }
-        wish_direction.0 = wish_direction.0.normalize_or_zero();
-    }
-}
-
-fn visuals_system(
+fn spawn_visuals_system(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,

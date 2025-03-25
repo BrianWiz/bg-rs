@@ -2,7 +2,7 @@ use bevy::prelude::*;
 
 use crate::components::Character;
 
-use super::{character::spawn_character, shared::GameState};
+use super::shared::GameState;
 
 pub struct GameModePlugin;
 
@@ -20,11 +20,7 @@ impl Plugin for GameModePlugin {
 }
 
 fn setup_game_mode(mut commands: Commands) {
-    spawn_character(
-        &mut commands,
-        Vec3::new(0.0, 0.5 + 0.001, 0.0),
-        true,
-    );
+
 }
 
 fn cleanup_game_mode(

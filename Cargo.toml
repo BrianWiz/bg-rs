@@ -5,4 +5,8 @@ resolver = "2"
 [workspace.dependencies]
 bevy = { version = "0.15.2", features = ["serialize"] }
 bevy_trenchbroom = { version = "0.7.0", default-features = false, features = ["avian", "auto_register"] }
+bevy_renet = "1.0.0"
+bitcode = { version = "0.6.6", features = ["derive", "serde"] }
+serde = { version = "1.0.219", features = ["derive"] }
 avian3d = "0.2.1"
+clap = { version = "4.5.32", features = ["derive"] }
