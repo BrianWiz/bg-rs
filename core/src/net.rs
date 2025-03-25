@@ -139,11 +139,7 @@ pub fn start_server(
         authentication: ServerAuthentication::Unsecure
     };
     commands.insert_resource(NetcodeServerTransport::new(server_config, socket)?);
-    commands.insert_resource(RenetServer::new(ConnectionConfig {
-        server_channels_config: ServerChannel::config(),
-        client_channels_config: ClientChannel::config(),
-        ..default()
-    }));
+    commands.insert_resource(RenetServer::new(connection_config()));
     Ok(())
 }
 
@@ -160,14 +156,18 @@ pub fn connect_to_server(
         client_id: current_time.as_millis() as u64,
     };
     
-    let socket = UdpSocket::bind("127.0.0.1:0")?;
+    let socket = UdpSocket::bind("0.0.0.0:0")?;
     commands.insert_resource(NetcodeClientTransport::new(current_time, authentication, socket)?);
-    commands.insert_resource(RenetClient::new(ConnectionConfig {
+    commands.insert_resource(RenetClient::new(connection_config()));
+    Ok(())
+}
+
+fn connection_config() -> ConnectionConfig {
+    ConnectionConfig {
         server_channels_config: ServerChannel::config(),
         client_channels_config: ClientChannel::config(),
         ..default()
-    }));
-    Ok(())
+    }
 }
 
 pub enum ClientChannel {

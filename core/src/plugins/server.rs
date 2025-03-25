@@ -11,9 +11,8 @@ impl Plugin for ServerPlugin {
             next_entity_net_id: 0,
         });
         app.add_plugins(RenetServerPlugin);
-        app.add_event::<HostServerEvent>();
-        app.add_systems(Update, start_server_system);
-        app.add_systems(Update, 
+        app.add_systems(FixedUpdate, start_server_system);
+        app.add_systems(FixedUpdate, 
             (
                 handle_client_input_system,
                 handle_connection_system,
@@ -21,6 +20,7 @@ impl Plugin for ServerPlugin {
             .chain()
             .run_if(resource_exists::<RenetServer>)
         );
+        app.add_event::<HostServerEvent>();
     }
 }
 

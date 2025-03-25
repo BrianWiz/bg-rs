@@ -32,7 +32,9 @@ impl Plugin for SharedPlugins {
         #[cfg(feature = "headless")]
         app.add_plugins(MinimalPlugins);
 
+        app.insert_resource(Time::<Fixed>::from_hz(FIXED_TIME_STEP_HZ));
         app.insert_state(GameState::Loading);
+
         app.add_plugins(PhysicsPlugins::default());
         app.add_plugins(CharacterPlugin);
         app.add_plugins(GameModePlugin);
@@ -40,7 +42,6 @@ impl Plugin for SharedPlugins {
         app.add_plugins(ServerPlugin);
         app.add_plugins(ClientPlugin);
         app.add_systems(Startup, setup_shared_system);
-        app.insert_resource(Time::<Fixed>::from_hz(FIXED_TIME_STEP_HZ));
     }
 }
 

@@ -13,8 +13,9 @@ impl Plugin for ClientPlugin {
             input_history: Vec::new(),
             next_input_id: 0,
             last_world_snapshot_processed_id: None,
+            is_connecting: false,
         });
-        app.add_systems(Update, (
+        app.add_systems(FixedUpdate, (
             connect_to_server_system,
             handle_server_messages_system.run_if(resource_exists::<RenetClient>),
         ));
@@ -28,6 +29,7 @@ struct GameClientState {
     input_history: Vec<PlayerInput>,
     next_input_id: InputId,
     last_world_snapshot_processed_id: Option<SnapshotId>,
+    is_connecting: bool,
 }
 
 #[derive(Event)]
@@ -39,8 +41,15 @@ pub struct ConnectToServerEvent {
 fn connect_to_server_system(
     mut commands: Commands,
     mut connect_to_server_event_reader: EventReader<ConnectToServerEvent>,
+    mut game_client_state: ResMut<GameClientState>,
 ) {
     for event in connect_to_server_event_reader.read() {
+        if game_client_state.is_connecting {
+            info!("Already attempting to connect to server");
+            continue;
+        }
+
+        game_client_state.is_connecting = true;
         match connect_to_server(
             &mut commands,
             &event.server_ip,
@@ -51,6 +60,7 @@ fn connect_to_server_system(
             }
             Err(e) => {
                 error!("Failed to connect to server: {}", e);
+                game_client_state.is_connecting = false;
             }
         }
     }
