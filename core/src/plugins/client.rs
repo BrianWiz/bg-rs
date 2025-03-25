@@ -21,6 +21,10 @@ impl Plugin for ClientPlugin {
             last_world_snapshot_processed_id: None,
             is_connecting: false,
         });
+        app.insert_resource(ClientDebugDiagnostics {
+            rollback_count: 0,
+            rollback_ticks: 0,
+        });
         app.add_systems(FixedUpdate, (
             connect_to_server_system,
             handle_server_messages_system.run_if(resource_exists::<RenetClient>),
@@ -28,6 +32,12 @@ impl Plugin for ClientPlugin {
         app.add_systems(FixedPreUpdate, produce_input_system.run_if(resource_exists::<RenetClient>));
         app.add_systems(FixedPostUpdate, send_input_system.run_if(resource_exists::<RenetClient>));
     }
+}
+
+#[derive(Resource)]
+pub struct ClientDebugDiagnostics {
+    pub rollback_count: u32,
+    pub rollback_ticks: u32,
 }
 
 #[derive(Resource)]
@@ -75,6 +85,7 @@ fn connect_to_server_system(
 fn handle_server_messages_system(
     fixed_time: Res<Time<Fixed>>,
     client_transport: Res<NetcodeClientTransport>,
+    mut client_debug_diagnostics: ResMut<ClientDebugDiagnostics>,
     mut game_client_state: ResMut<GameClientState>,
     mut renet_client: ResMut<RenetClient>,
     mut character_spawn_events: EventWriter<SpawnCharacterEvent>,
@@ -112,6 +123,7 @@ fn handle_server_messages_system(
             Ok(world_snapshot) => {
                 try_apply_world_snapshot(
                     &fixed_time,
+                    &mut client_debug_diagnostics,
                     &client_transport,
                     &mut game_client_state, 
                     &world_snapshot,
@@ -203,6 +215,7 @@ fn send_input_system(
 
 fn try_apply_world_snapshot(
     fixed_time: &Time<Fixed>,
+    client_debug_diagnostics: &mut ClientDebugDiagnostics,
     client_transport: &NetcodeClientTransport,
     game_client_state: &mut GameClientState,
     world_snapshot: &WorldSnapshot,
@@ -242,9 +255,9 @@ fn try_apply_world_snapshot(
                                 if let Some(final_position) = character_input.final_position {
                                     
                                     let correction_distance = final_position.distance(new_position);
-                                    if correction_distance > 0.001 {
-                                        info!("Rolling back, correction distance: {}", correction_distance);
-                                        
+                                    if correction_distance > 0.1 {
+                                        //info!("Rolling back, correction distance: {}", correction_distance);
+                                        client_debug_diagnostics.rollback_count += 1;
                                         transform.translation = new_position;
 
                                         if let Some(new_velocity) = character_entity_snapshot.velocity {
@@ -253,6 +266,7 @@ fn try_apply_world_snapshot(
 
                                         for input in game_client_state.input_history.iter_mut() {
                                             if input.id > acked_input_id {
+                                                client_debug_diagnostics.rollback_ticks += 1;
                                                 if let Some(character_input) = input.character_input.as_mut() {
                                                     wish_direction.0 = character_input.wish_direction;
                                                     update_character_velocity(fixed_time, velocity, wish_direction);
@@ -268,7 +282,7 @@ fn try_apply_world_snapshot(
                                             }
                                         }
                                     } else {
-                                        info!("no correction needed");
+                                        //info!("no correction needed");
                                     }
                                 }
                             }

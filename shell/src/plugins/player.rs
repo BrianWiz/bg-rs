@@ -1,6 +1,6 @@
-use core::{components::{Character, LocallyControlled}};
+use core::{client::ClientDebugDiagnostics, components::{Character, LocallyControlled}};
 
-use bevy::{prelude::*, window::PrimaryWindow};
+use bevy::{diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin}, prelude::*, window::PrimaryWindow};
 
 const CAMERA_Y_OFFSET: f32 = 6.0;
 
@@ -11,8 +11,15 @@ impl Plugin for PlayerPlugin {
         app.add_systems(Startup, setup_player_system);
         app.add_systems(FixedPreUpdate, spawn_visuals_system);
         app.add_systems(Update, camera_follow_system);
+        app.add_systems(Update, hud_metrics_system
+            .run_if(resource_exists::<ClientDebugDiagnostics>)
+            .run_if(resource_exists::<DiagnosticsStore>)
+        );
     }
 }
+
+#[derive(Component)]
+struct HUDMetricsText;
 
 fn setup_player_system(mut commands: Commands) {
     // spawn camera looking down
@@ -27,6 +34,51 @@ fn setup_player_system(mut commands: Commands) {
             // look down
             .with_rotation(Quat::from_rotation_x(-std::f32::consts::PI * 0.5)),
     ));
+
+    commands
+        .spawn(
+            Node {
+                position_type: PositionType::Relative,
+                width: Val::Percent(100.0),
+                height: Val::Percent(100.0),
+                ..default()
+            }
+        ).with_children(|parent| {
+            // Prediction metrics text
+            parent.spawn((
+                HUDMetricsText,
+                Node {
+                    position_type: PositionType::Absolute,
+                    top: Val::Px(10.0),
+                    right: Val::Px(10.0),
+                    ..default()
+                },
+                Text::new("Prediction metrics..."),
+            ));
+        });
+}
+
+fn hud_metrics_system(
+    diagnostics: Res<DiagnosticsStore>,
+    prediction_metrics: Option<Res<ClientDebugDiagnostics>>,
+    mut text_query: Query<&mut Text, With<HUDMetricsText>>,
+) {
+    if let Some(prediction_metrics) = prediction_metrics {
+        if let Ok(mut text) = text_query.get_single_mut() {
+            if let Some(fps) = diagnostics.get(&FrameTimeDiagnosticsPlugin::FPS) {
+                text.0 = format!("FPS: {}\nRollbacks: {}\nRollback Ticks: {}",
+                    fps.smoothed().unwrap_or(0.0).round(),
+                    prediction_metrics.rollback_count,
+                    prediction_metrics.rollback_ticks
+                );
+            } else {
+                text.0 = format!("Rollbacks: {}\nRollback Ticks: {}",
+                    prediction_metrics.rollback_count,
+                    prediction_metrics.rollback_ticks
+                );
+            }
+        }
+    }
 }
 
 fn spawn_visuals_system(
