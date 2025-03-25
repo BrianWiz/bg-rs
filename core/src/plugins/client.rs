@@ -2,7 +2,7 @@ use avian3d::prelude::SpatialQuery;
 use bevy::prelude::*;
 use bevy_renet::{netcode::{NetcodeClientPlugin, NetcodeClientTransport}, renet::RenetClient, RenetClientPlugin};
 
-use crate::{character::move_character, components::{Character, LocallyControlled, ReplicatedEntity, Velocity, WishDirection}, net::{connect_to_server, CharacterInput, ClientChannel, DespawnCharacterEvent, InputId, PlayerInput, ServerChannel, SnapshotId, SpawnCharacterEvent, WorldSnapshot}};
+use crate::{character::{move_character, update_character_velocity}, components::{Character, LocallyControlled, ReplicatedEntity, Velocity, WishDirection}, net::{connect_to_server, CharacterInput, ClientChannel, DespawnCharacterEvent, EntitySnapshot, InputId, PlayerInput, ServerChannel, SnapshotId, SpawnCharacterEvent, WorldSnapshot}};
 
 use super::shared::FIXED_TIME_STEP_HZ;
 
@@ -163,8 +163,9 @@ fn produce_input_system(
     }
 
     // retain 1 second of inputs, we're running at 128hz (or whatever is configured, see FIXED_TIME_STEP_HZ)
-    let cutoff_input_id = game_client_state.next_input_id - FIXED_TIME_STEP_HZ as InputId;
-    game_client_state.input_history.retain(|input| input.id >= cutoff_input_id);
+    if game_client_state.input_history.len() > FIXED_TIME_STEP_HZ as usize {
+        game_client_state.input_history.remove(0);
+    }
 }
 
 fn send_input_system(
@@ -224,51 +225,78 @@ fn try_apply_world_snapshot(
     let mut all_characters = characters.iter_mut().collect::<Vec<_>>();
 
     for character_entity_snapshot in world_snapshot.character_entities.iter() {
-        info!("Applying world snapshot: {}", character_entity_snapshot.id);
 
         // find the character entity
         if let Some((entity, transform, velocity, wish_direction, replicated_entity)) = all_characters.iter_mut().find(|(_, _, _, _, net_id)| net_id.net_id == character_entity_snapshot.id) {
-            
+        
             let is_local = replicated_entity.owner_client_id == client_transport.client_id();
 
             if is_local {
-                // @todo-brian: reconcile by replaying the input events
                 if let Some(new_position) = character_entity_snapshot.position {
-                    transform.translation = new_position;
-                }
+                    if let Some(acked_input_id) = world_snapshot.acking_input_id {
+                        
+                        let acked_input = game_client_state.input_history.iter().find(|input| input.id == acked_input_id);
+                        
+                        if let Some(acked_input) = acked_input {
+                            if let Some(character_input) = acked_input.character_input.as_ref() {
+                                if let Some(final_position) = character_input.final_position {
+                                    
+                                    let correction_distance = final_position.distance(new_position);
+                                    if correction_distance > 0.001 {
+                                        info!("Rolling back, correction distance: {}", correction_distance);
+                                        
+                                        transform.translation = new_position;
 
-                if let Some(new_velocity) = character_entity_snapshot.velocity {
-                    velocity.0 = new_velocity;
-                }
+                                        if let Some(new_velocity) = character_entity_snapshot.velocity {
+                                            velocity.0 = new_velocity;
+                                        }
 
-                // replay all the inputs that are not acked
-                if let Some(acked_input_id) = world_snapshot.acking_input_id {
-                    for input in game_client_state.input_history.iter() {
-                        if input.id > acked_input_id {
-                            if let Some(character_input) = input.character_input.as_ref() {
-                                wish_direction.0 = character_input.wish_direction;
-                                move_character(
-                                    fixed_time, 
-                                    entity, 
-                                    transform, 
-                                    velocity, 
-                                    spatial_query
-                                );
+                                        for input in game_client_state.input_history.iter_mut() {
+                                            if input.id > acked_input_id {
+                                                if let Some(character_input) = input.character_input.as_mut() {
+                                                    wish_direction.0 = character_input.wish_direction;
+                                                    update_character_velocity(fixed_time, velocity, wish_direction);
+                                                    move_character(
+                                                        fixed_time, 
+                                                        entity, 
+                                                        transform, 
+                                                        velocity, 
+                                                        spatial_query
+                                                    );
+                                                    character_input.final_position = Some(transform.translation);
+                                                }
+                                            }
+                                        }
+                                    } else {
+                                        info!("no correction needed");
+                                    }
+                                }
                             }
                         }
+                    } else {
+                        apply_entity_snapshot(transform, velocity, character_entity_snapshot);
                     }
                 }
             } else {
-                if let Some(new_position) = character_entity_snapshot.position {
-                    transform.translation = new_position;
-                }
-
-                if let Some(new_velocity) = character_entity_snapshot.velocity {
-                    velocity.0 = new_velocity;
-                }
+                apply_entity_snapshot(transform, velocity, character_entity_snapshot);
             }
         }
     }
 
     game_client_state.last_world_snapshot_processed_id = Some(world_snapshot.id);
+}
+
+fn apply_entity_snapshot(
+    transform: &mut Transform,
+    velocity: &mut Velocity,
+    entity_snapshot: &EntitySnapshot,
+) {
+
+    if let Some(new_position) = entity_snapshot.position {
+        transform.translation = new_position;
+    }
+
+    if let Some(new_velocity) = entity_snapshot.velocity {
+        velocity.0 = new_velocity;
+    }
 }

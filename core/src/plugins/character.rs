@@ -59,20 +59,7 @@ fn update_velocity_system(
     mut query: Query<(&mut Velocity, &WishDirection), With<Character>>,
 ) {
     for (mut velocity, wish_direction) in query.iter_mut() {
-        velocity.0 = apply_friction(
-            velocity.0, 
-            velocity.0.length(), 
-            5.0, 
-            fixed_time.delta_secs()
-        );
-
-        let current_speed = velocity.0.length();
-        velocity.0 += accelerate(
-            wish_direction.0, 
-            20.0, 
-            current_speed, 2.0, 
-            fixed_time.delta_secs()
-        );
+        update_character_velocity(&fixed_time, &mut velocity, wish_direction);
     }
 }
 
@@ -90,6 +77,30 @@ fn move_character_system(
             &spatial_query
         );
     }
+}
+
+////////////////////////////////////////////////////////
+/// Updates the velocity based on the wish direction.
+pub fn update_character_velocity(
+    fixed_time: &Time<Fixed>,
+    velocity: &mut Velocity,
+    wish_direction: &WishDirection,
+) {
+    velocity.0 = apply_friction(
+        velocity.0, 
+        velocity.0.length(), 
+        5.0, 
+        fixed_time.delta_secs()
+    );
+
+    let current_speed = velocity.0.length();
+    velocity.0 += accelerate(
+        wish_direction.0, 
+        20.0, 
+        current_speed, 
+        2.0, 
+        fixed_time.delta_secs()
+    );
 }
 
 ////////////////////////////////////////////////////////

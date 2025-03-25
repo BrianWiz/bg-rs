@@ -1,7 +1,7 @@
-use bevy::prelude::*;
-use bevy_renet::{netcode::NetcodeServerPlugin, renet::{RenetServer, ServerEvent}, RenetServerPlugin};
+use bevy::{ecs::world, prelude::*, utils::HashMap};
+use bevy_renet::{netcode::NetcodeServerPlugin, renet::{ClientId, RenetServer, ServerEvent}, RenetServerPlugin};
 
-use crate::{components::{Character, ReplicatedEntity, Velocity, WishDirection}, net::{start_server, ClientChannel, DespawnCharacterEvent, EntityNetId, EntitySnapshot, PlayerInput, ServerChannel, SnapshotId, SpawnCharacterEvent, WorldSnapshot}};
+use crate::{components::{Character, ReplicatedEntity, Velocity, WishDirection}, net::{start_server, ClientChannel, DespawnCharacterEvent, EntityNetId, EntitySnapshot, InputId, PlayerInput, ServerChannel, SnapshotId, SpawnCharacterEvent, WorldSnapshot}};
 
 pub struct ServerPlugin;
 
@@ -10,6 +10,9 @@ impl Plugin for ServerPlugin {
         app.insert_resource(IdTracker {
             next_world_snapshot_id: 0,
             next_entity_net_id: 0,
+        });
+        app.insert_resource(GameServerState {
+            players: HashMap::new(),
         });
         app.add_plugins((
             RenetServerPlugin,
@@ -28,6 +31,17 @@ impl Plugin for ServerPlugin {
         app.add_event::<HostServerEvent>();
     }
 }
+
+struct Player {
+    last_acked_world_snapshot_id: Option<SnapshotId>,
+    last_processed_input_id: Option<InputId>,
+}
+
+#[derive(Resource)]
+struct GameServerState {
+    players: HashMap<ClientId, Player>,
+}
+
 
 #[derive(Resource)]
 struct IdTracker {
@@ -60,6 +74,7 @@ fn start_server_system(
 }
 
 fn handle_client_input_system(
+    mut game_server_state: ResMut<GameServerState>,
     mut renet_server: ResMut<RenetServer>,
     mut characters: Query<(&mut WishDirection, &ReplicatedEntity), With<Character>>,
 ) {
@@ -71,6 +86,11 @@ fn handle_client_input_system(
                         if replicated_entity.owner_client_id == client_id {
                             if let Some(character_input) = &input.character_input {
                                 wish_direction.0 = character_input.wish_direction;
+
+                                if let Some(player) = game_server_state.players.get_mut(&client_id) {
+                                    player.last_processed_input_id = Some(input.id);
+                                    player.last_acked_world_snapshot_id = input.acking_snapshot_id;
+                                }
                             }
                         }
                     }
@@ -84,6 +104,7 @@ fn handle_client_input_system(
 }
 
 fn handle_connection_system(
+    mut game_server_state: ResMut<GameServerState>,
     mut id_tracker: ResMut<IdTracker>,
     mut renet_server: ResMut<RenetServer>,
     mut server_events: EventReader<ServerEvent>,
@@ -95,6 +116,11 @@ fn handle_connection_system(
         match event {
             ServerEvent::ClientConnected { client_id } => {
                 info!("Player {} connected", client_id);
+
+                game_server_state.players.insert(*client_id, Player {
+                    last_acked_world_snapshot_id: None,
+                    last_processed_input_id: None,
+                });
 
                 // get every character and tell the new client to spawn them
                 for (_, transform, net_id) in characters.iter() {
@@ -148,6 +174,8 @@ fn handle_connection_system(
             ServerEvent::ClientDisconnected { client_id, reason } => {
                 info!("Player {} disconnected: {:?}", client_id, reason);
 
+                game_server_state.players.remove(client_id);
+
                 for (_, _, net_id) in characters.iter() {
 
                     if net_id.owner_client_id != *client_id {
@@ -181,6 +209,7 @@ fn handle_connection_system(
 fn send_world_snapshot_system(
     mut id_tracker: ResMut<IdTracker>,
     mut renet_server: ResMut<RenetServer>,
+    game_server_state: Res<GameServerState>,
     characters: Query<(&Transform, &Velocity, &ReplicatedEntity), With<Character>>,
 ) {
     let mut world_snapshot = WorldSnapshot {
@@ -201,6 +230,13 @@ fn send_world_snapshot_system(
     }
 
     for cid in renet_server.clients_id() {
+
+        let mut world_snapshot = world_snapshot.clone();
+
+        if let Some(player) = game_server_state.players.get(&cid) {
+            world_snapshot.acking_input_id = player.last_processed_input_id;
+        }
+
         match bitcode::serialize(&world_snapshot) {
             Ok(serialized) => {
                 renet_server.send_message(cid, ServerChannel::WorldSnapshot, serialized);
@@ -211,6 +247,3 @@ fn send_world_snapshot_system(
         }
     }
 }
-
-
-
