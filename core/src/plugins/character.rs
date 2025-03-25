@@ -84,7 +84,7 @@ fn move_character_system(
     for (entity, mut transform, mut velocity) in query.iter_mut() {
         move_character(
             &fixed_time, 
-            entity, 
+            &entity, 
             &mut transform, 
             &mut velocity, 
             &spatial_query
@@ -97,7 +97,7 @@ fn move_character_system(
 /// Will collide with walls, and slide along them.
 pub fn move_character(
     fixed_time: &Time<Fixed>,
-    entity: Entity,
+    entity: &Entity,
     transform: &mut Transform,
     velocity: &mut Velocity,
     spatial_query: &SpatialQuery,
@@ -116,7 +116,7 @@ pub fn move_character(
             Quat::default(),
             Dir3::new(remaining_motion.normalize_or_zero()).unwrap_or(Dir3::X),
             &ShapeCastConfig::from_max_distance(remaining_motion.length()),
-            &SpatialQueryFilter::default().with_excluded_entities([entity]),
+            &SpatialQueryFilter::default().with_excluded_entities([*entity]),
         ) {
             // Move to just before the collision point
             transform.translation += remaining_motion.normalize_or_zero() * hit.distance;
@@ -145,6 +145,7 @@ pub fn spawn_character(
     net_id: EntityNetId,
     owner_client_id: ClientId,
 ) {
+    info!("Spawning character at: {:?}", position);
     // visuals are spawned in the shell
     let new_entity = commands.spawn((
         ReplicatedEntity {

@@ -1,13 +1,19 @@
+use avian3d::prelude::SpatialQuery;
 use bevy::prelude::*;
-use bevy_renet::{netcode::NetcodeClientTransport, renet::RenetClient, RenetClientPlugin};
+use bevy_renet::{netcode::{NetcodeClientPlugin, NetcodeClientTransport}, renet::RenetClient, RenetClientPlugin};
 
-use crate::{components::{Character, LocallyControlled, ReplicatedEntity, Velocity, WishDirection}, net::{connect_to_server, CharacterInput, ClientChannel, DespawnCharacterEvent, InputId, PlayerInput, ServerChannel, SnapshotId, SpawnCharacterEvent, WorldSnapshot}};
+use crate::{character::move_character, components::{Character, LocallyControlled, ReplicatedEntity, Velocity, WishDirection}, net::{connect_to_server, CharacterInput, ClientChannel, DespawnCharacterEvent, InputId, PlayerInput, ServerChannel, SnapshotId, SpawnCharacterEvent, WorldSnapshot}};
+
+use super::shared::FIXED_TIME_STEP_HZ;
 
 pub struct ClientPlugin;
 
 impl Plugin for ClientPlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugins(RenetClientPlugin);
+        app.add_plugins((
+            RenetClientPlugin,
+            NetcodeClientPlugin,
+        ));
         app.add_event::<ConnectToServerEvent>();
         app.insert_resource(GameClientState {
             input_history: Vec::new(),
@@ -68,12 +74,13 @@ fn connect_to_server_system(
 
 fn handle_server_messages_system(
     fixed_time: Res<Time<Fixed>>,
-    mut game_client_state: ResMut<GameClientState>,
     client_transport: Res<NetcodeClientTransport>,
+    mut game_client_state: ResMut<GameClientState>,
     mut renet_client: ResMut<RenetClient>,
     mut character_spawn_events: EventWriter<SpawnCharacterEvent>,
     mut character_despawn_events: EventWriter<DespawnCharacterEvent>,
-    mut characters: Query<(&mut Transform, &mut Velocity, &ReplicatedEntity), With<Character>>,
+    mut characters: Query<(Entity, &mut Transform, &mut Velocity, &mut WishDirection, &ReplicatedEntity), With<Character>>,
+    spatial_query: SpatialQuery,
 ) {
     while let Some(message) = renet_client.receive_message(ServerChannel::SpawnCharacter) {
         match bitcode::deserialize::<SpawnCharacterEvent>(&message) {
@@ -108,6 +115,7 @@ fn handle_server_messages_system(
                     &client_transport,
                     &mut game_client_state, 
                     &world_snapshot,
+                    &spatial_query,
                     &mut characters,
                 );
             }
@@ -140,9 +148,10 @@ fn produce_input_system(
         wish_direction.0 = wish_direction.0.normalize_or_zero();
 
         let id = game_client_state.next_input_id;
+        let acking_snapshot_id = game_client_state.last_world_snapshot_processed_id;
         game_client_state.input_history.push(PlayerInput {
             id,
-            acking_snapshot_id: None,
+            acking_snapshot_id,
             character_input: Some(CharacterInput {
                 wish_direction: wish_direction.0,
                 wish_yaw: 0.0,
@@ -152,6 +161,10 @@ fn produce_input_system(
         });
         game_client_state.next_input_id += 1;
     }
+
+    // retain 1 second of inputs, we're running at 128hz (or whatever is configured, see FIXED_TIME_STEP_HZ)
+    let cutoff_input_id = game_client_state.next_input_id - FIXED_TIME_STEP_HZ as InputId;
+    game_client_state.input_history.retain(|input| input.id >= cutoff_input_id);
 }
 
 fn send_input_system(
@@ -192,13 +205,19 @@ fn try_apply_world_snapshot(
     client_transport: &NetcodeClientTransport,
     game_client_state: &mut GameClientState,
     world_snapshot: &WorldSnapshot,
-    characters: &mut Query<(&mut Transform, &mut Velocity, &ReplicatedEntity), With<Character>>,
+    spatial_query: &SpatialQuery,
+    characters: &mut Query<(Entity, &mut Transform, &mut Velocity, &mut WishDirection, &ReplicatedEntity), With<Character>>,
 ) {
     if let Some(last_world_snapshot_processed_id) = game_client_state.last_world_snapshot_processed_id {
         if world_snapshot.id <= last_world_snapshot_processed_id {
             debug!("Skipping world snapshot {}, already processed newer snapshot {}", world_snapshot.id, last_world_snapshot_processed_id);
             return;
         }
+    }
+
+    // delete acked inputs, except the one just acked.
+    if let Some(acked_input_id) = world_snapshot.acking_input_id {
+        game_client_state.input_history.retain(|input| input.id >= acked_input_id);
     }
 
     // first query all the characters
@@ -208,7 +227,7 @@ fn try_apply_world_snapshot(
         info!("Applying world snapshot: {}", character_entity_snapshot.id);
 
         // find the character entity
-        if let Some((transform, velocity, replicated_entity)) = all_characters.iter_mut().find(|(_, _, net_id)| net_id.net_id == character_entity_snapshot.id) {
+        if let Some((entity, transform, velocity, wish_direction, replicated_entity)) = all_characters.iter_mut().find(|(_, _, _, _, net_id)| net_id.net_id == character_entity_snapshot.id) {
             
             let is_local = replicated_entity.owner_client_id == client_transport.client_id();
 
@@ -220,6 +239,24 @@ fn try_apply_world_snapshot(
 
                 if let Some(new_velocity) = character_entity_snapshot.velocity {
                     velocity.0 = new_velocity;
+                }
+
+                // replay all the inputs that are not acked
+                if let Some(acked_input_id) = world_snapshot.acking_input_id {
+                    for input in game_client_state.input_history.iter() {
+                        if input.id > acked_input_id {
+                            if let Some(character_input) = input.character_input.as_ref() {
+                                wish_direction.0 = character_input.wish_direction;
+                                move_character(
+                                    fixed_time, 
+                                    entity, 
+                                    transform, 
+                                    velocity, 
+                                    spatial_query
+                                );
+                            }
+                        }
+                    }
                 }
             } else {
                 if let Some(new_position) = character_entity_snapshot.position {

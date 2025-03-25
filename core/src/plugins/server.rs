@@ -1,16 +1,20 @@
 use bevy::prelude::*;
-use bevy_renet::{renet::{RenetServer, ServerEvent}, RenetServerPlugin};
+use bevy_renet::{netcode::NetcodeServerPlugin, renet::{RenetServer, ServerEvent}, RenetServerPlugin};
 
-use crate::{components::{Character, ReplicatedEntity, WishDirection}, net::{start_server, ClientChannel, DespawnCharacterEvent, EntityNetId, PlayerInput, ServerChannel, SpawnCharacterEvent}};
+use crate::{components::{Character, ReplicatedEntity, Velocity, WishDirection}, net::{start_server, ClientChannel, DespawnCharacterEvent, EntityNetId, EntitySnapshot, PlayerInput, ServerChannel, SnapshotId, SpawnCharacterEvent, WorldSnapshot}};
 
 pub struct ServerPlugin;
 
 impl Plugin for ServerPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(IdTracker {
+            next_world_snapshot_id: 0,
             next_entity_net_id: 0,
         });
-        app.add_plugins(RenetServerPlugin);
+        app.add_plugins((
+            RenetServerPlugin,
+            NetcodeServerPlugin,
+        ));
         app.add_systems(FixedUpdate, start_server_system);
         app.add_systems(FixedUpdate, 
             (
@@ -20,12 +24,14 @@ impl Plugin for ServerPlugin {
             .chain()
             .run_if(resource_exists::<RenetServer>)
         );
+        app.add_systems(FixedPostUpdate, send_world_snapshot_system.run_if(resource_exists::<RenetServer>));
         app.add_event::<HostServerEvent>();
     }
 }
 
 #[derive(Resource)]
 struct IdTracker {
+    next_world_snapshot_id: SnapshotId,
     next_entity_net_id: EntityNetId,
 }
 
@@ -113,7 +119,7 @@ fn handle_connection_system(
                 let character_spawn_event = SpawnCharacterEvent {
                     net_id: id_tracker.next_entity_net_id,
                     client_id: *client_id,
-                    position: Vec3::new(0.0, 2.0, 0.0),
+                    position: Vec3::new(0.0, 0.5, 0.0),
                     is_local: false,
                 };
                 character_spawn_events.send(character_spawn_event.clone());
@@ -171,4 +177,40 @@ fn handle_connection_system(
         }
     }
 }
+
+fn send_world_snapshot_system(
+    mut id_tracker: ResMut<IdTracker>,
+    mut renet_server: ResMut<RenetServer>,
+    characters: Query<(&Transform, &Velocity, &ReplicatedEntity), With<Character>>,
+) {
+    let mut world_snapshot = WorldSnapshot {
+        id: id_tracker.next_world_snapshot_id,
+        acking_input_id: None,
+        character_entities: Vec::new(),
+    };
+
+    id_tracker.next_world_snapshot_id += 1;
+
+    for (transform, velocity, replicated_entity) in characters.iter() {
+        world_snapshot.character_entities.push(EntitySnapshot {
+            id: replicated_entity.net_id,
+            position: Some(transform.translation),
+            velocity: Some(velocity.0),
+            yaw: Some(0.0),
+        });
+    }
+
+    for cid in renet_server.clients_id() {
+        match bitcode::serialize(&world_snapshot) {
+            Ok(serialized) => {
+                renet_server.send_message(cid, ServerChannel::WorldSnapshot, serialized);
+            }
+            Err(e) => {
+                error!("Error serializing message: {}", e);
+            }
+        }
+    }
+}
+
+
 

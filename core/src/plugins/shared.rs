@@ -6,7 +6,7 @@ use super::{character::CharacterPlugin, client::{ClientPlugin, ConnectToServerEv
 
 pub struct SharedPlugins;
 
-const FIXED_TIME_STEP_HZ: f64 = 128.0;
+pub const FIXED_TIME_STEP_HZ: f64 = 128.0;
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None, name = "Brutal Grounds", author = "Riverside Games")]

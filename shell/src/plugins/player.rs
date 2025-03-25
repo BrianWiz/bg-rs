@@ -33,7 +33,7 @@ fn spawn_visuals_system(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
-    new_characters: Query<Entity, (With<LocallyControlled>, Added<Character>)>,
+    new_characters: Query<Entity, Added<Character>>,
 ) {
     for entity in new_characters.iter() {
         commands.entity(entity).with_children(|parent| {

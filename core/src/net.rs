@@ -130,16 +130,29 @@ pub fn start_server(
     port: u16,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let socket_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), port);
+    info!("Attempting to bind server socket to: {}", socket_addr);
+    
     let socket = UdpSocket::bind(socket_addr)?;
+    let current_time = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH)?;
+    
+    // Get the actual local address
+    let local_addr = socket.local_addr()?;
+    info!("Server socket successfully bound to: {}", local_addr);
+    
     let server_config = ServerConfig {
-        current_time: SystemTime::now().duration_since(SystemTime::UNIX_EPOCH)?,
+        current_time,
         max_clients: 64,
         protocol_id: 0,
-        public_addresses: vec![socket_addr],
+        public_addresses: vec![local_addr],
         authentication: ServerAuthentication::Unsecure
     };
-    commands.insert_resource(NetcodeServerTransport::new(server_config, socket)?);
+    
+    let transport = NetcodeServerTransport::new(server_config, socket)?;
+    info!("Server transport created successfully");
+    
+    commands.insert_resource(transport);
     commands.insert_resource(RenetServer::new(connection_config()));
+    info!("Server resources inserted successfully");
     Ok(())
 }
 
@@ -149,16 +162,20 @@ pub fn connect_to_server(
     server_port: &u16,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let current_time = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH)?;
+    let server_addr = SocketAddr::new(server_ip.parse()?, *server_port);    
     let authentication = ClientAuthentication::Unsecure {
-        server_addr: SocketAddr::new(server_ip.parse()?, *server_port),
+        server_addr,
         user_data: None,
         protocol_id: 0,
         client_id: current_time.as_millis() as u64,
     };
     
-    let socket = UdpSocket::bind("0.0.0.0:0")?;
-    commands.insert_resource(NetcodeClientTransport::new(current_time, authentication, socket)?);
-    commands.insert_resource(RenetClient::new(connection_config()));
+    let socket = UdpSocket::bind("127.0.0.1:0")?;
+    let transport = NetcodeClientTransport::new(current_time, authentication, socket)?;
+    let client = RenetClient::new(connection_config());
+    
+    commands.insert_resource(transport);
+    commands.insert_resource(client);
     Ok(())
 }
 
