@@ -1,6 +1,6 @@
 multiplayer:
-- [ ] jitter buffer
+- [x] jitter buffer
 
 abilites:
-- [ ] dash
+- [x] dash
 
