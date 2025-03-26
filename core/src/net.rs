@@ -121,8 +121,17 @@ pub struct DespawnCharacterEvent {
 
 #[derive(Serialize, Deserialize, Event, Clone)]
 pub struct CharacterInput {
+    //////////////////////////////////////////////
+    // networked
+    //////////////////////////////////////////////
     pub wish_direction: Vec3,
     pub wish_yaw: f32,
+    pub predicted_ability: bool,
+
+    //////////////////////////////////////////////
+    // non-networked
+    //////////////////////////////////////////////
+    #[serde(skip)]
     pub final_position: Option<Vec3>,
 }
 

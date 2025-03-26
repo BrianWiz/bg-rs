@@ -13,7 +13,7 @@ impl Plugin for GameModePlugin {
     }
 }
 
-fn setup_game_mode(mut commands: Commands) {}
+fn setup_game_mode(mut _commands: Commands) {}
 
 fn cleanup_game_mode(mut commands: Commands, query: Query<Entity, With<Character>>) {
     for entity in query.iter() {

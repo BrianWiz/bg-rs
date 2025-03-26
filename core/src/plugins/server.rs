@@ -6,7 +6,7 @@ use bevy_renet::{
 };
 
 use crate::{
-    components::{Character, ReplicatedEntity, Velocity, WishDirection},
+    components::{Character, ReplicatedEntity, UseAbility, Velocity, WishDirection},
     net::{
         ClientChannel, DespawnCharacterEvent, EntityNetId, EntitySnapshot, InputId, PlayerInput,
         ServerChannel, SnapshotId, SpawnCharacterEvent, WorldSnapshot, start_server,
@@ -76,16 +76,22 @@ fn start_server_system(
 fn handle_client_input_system(
     mut game_server_state: ResMut<GameServerState>,
     mut renet_server: ResMut<RenetServer>,
-    mut characters: Query<(&mut WishDirection, &ReplicatedEntity), With<Character>>,
+    mut characters: Query<
+        (&mut WishDirection, &mut UseAbility, &ReplicatedEntity),
+        With<Character>,
+    >,
 ) {
     for client_id in renet_server.clients_id() {
         if let Some(message) = renet_server.receive_message(client_id, ClientChannel::Input) {
             match bitcode::deserialize::<PlayerInput>(&message) {
                 Ok(input) => {
-                    for (mut wish_direction, replicated_entity) in characters.iter_mut() {
+                    for (mut wish_direction, mut use_ability, replicated_entity) in
+                        characters.iter_mut()
+                    {
                         if replicated_entity.owner_client_id == client_id {
                             if let Some(character_input) = &input.character_input {
                                 wish_direction.0 = character_input.wish_direction;
+                                use_ability.0 = character_input.predicted_ability;
 
                                 if let Some(player) = game_server_state.players.get_mut(&client_id)
                                 {

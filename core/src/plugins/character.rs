@@ -4,7 +4,8 @@ use bevy_renet::renet::ClientId;
 
 use crate::{
     components::{
-        Character, LocallyControlled, RemoteControlled, ReplicatedEntity, Velocity, WishDirection,
+        Ability, Character, LocallyControlled, RemoteControlled, ReplicatedEntity, UseAbility,
+        Velocity, WishDirection,
     },
     net::{DespawnCharacterEvent, EntityNetId, SpawnCharacterEvent},
 };
@@ -62,10 +63,11 @@ fn despawn_character_system(
 
 fn update_velocity_system(
     fixed_time: Res<Time<Fixed>>,
-    mut query: Query<(&mut Velocity, &WishDirection), With<Character>>,
+    mut query: Query<(&mut Velocity, &WishDirection, &UseAbility, &Ability), With<Character>>,
 ) {
-    for (mut velocity, wish_direction) in query.iter_mut() {
-        update_character_velocity(&fixed_time, &mut velocity, wish_direction);
+    for (mut velocity, wish_direction, use_ability, ability) in query.iter_mut() {
+        let recoil = if use_ability.0 { ability.recoil } else { None };
+        update_character_velocity(&fixed_time, &mut velocity, wish_direction, recoil);
     }
 }
 
@@ -91,6 +93,7 @@ pub fn update_character_velocity(
     fixed_time: &Time<Fixed>,
     velocity: &mut Velocity,
     wish_direction: &WishDirection,
+    recoil: Option<f32>,
 ) {
     velocity.0 = apply_friction(
         velocity.0,
@@ -107,6 +110,10 @@ pub fn update_character_velocity(
         2.0,
         fixed_time.delta_secs(),
     );
+
+    if let Some(recoil) = recoil {
+        velocity.0 = wish_direction.0 * recoil;
+    }
 }
 
 ////////////////////////////////////////////////////////
@@ -173,6 +180,11 @@ pub fn spawn_character(
             Character,
             Velocity(Vec3::ZERO),
             WishDirection(Vec3::ZERO),
+            UseAbility(false),
+            Ability {
+                ticks_until_ready: 0,
+                recoil: Some(20.0),
+            },
             Transform::default().with_translation(position),
         ))
         .id();

@@ -8,7 +8,10 @@ use bevy_renet::{
 
 use crate::{
     character::{move_character, update_character_velocity},
-    components::{Character, LocallyControlled, ReplicatedEntity, Velocity, WishDirection},
+    components::{
+        Ability, Character, LocallyControlled, ReplicatedEntity, UseAbility, Velocity,
+        WishDirection,
+    },
     net::{
         CharacterInput, ClientChannel, DespawnCharacterEvent, EntitySnapshot, InputId, PlayerInput,
         ServerChannel, SnapshotId, SpawnCharacterEvent, WorldSnapshot, connect_to_server,
@@ -42,7 +45,7 @@ impl Plugin for ClientPlugin {
         );
         app.add_systems(
             FixedPreUpdate,
-            produce_input_system.run_if(resource_exists::<RenetClient>),
+            weapons_abilities_movement_system.run_if(resource_exists::<RenetClient>),
         );
         app.add_systems(
             FixedPostUpdate,
@@ -112,6 +115,8 @@ fn handle_server_messages_system(
             &mut Transform,
             &mut Velocity,
             &mut WishDirection,
+            &mut UseAbility,
+            &mut Ability,
             &ReplicatedEntity,
         ),
         With<Character>,
@@ -171,12 +176,14 @@ fn handle_server_messages_system(
     }
 }
 
-fn produce_input_system(
+/// Handles weapons, abilities and movement.
+/// We do this all in one system because weapons and movement go hand in hand.
+fn weapons_abilities_movement_system(
     mut game_client_state: ResMut<GameClientState>,
     keyboard_input: Res<ButtonInput<KeyCode>>,
-    mut query: Query<&mut WishDirection, With<LocallyControlled>>,
+    mut query: Query<(&mut WishDirection, &mut UseAbility, &mut Ability), With<LocallyControlled>>,
 ) {
-    for mut wish_direction in query.iter_mut() {
+    for (mut wish_direction, mut use_ability, mut ability) in query.iter_mut() {
         wish_direction.0 = Vec3::ZERO;
         if keyboard_input.pressed(KeyCode::KeyW) {
             wish_direction.0 += Vec3::NEG_Z;
@@ -190,16 +197,30 @@ fn produce_input_system(
         if keyboard_input.pressed(KeyCode::KeyD) {
             wish_direction.0 += Vec3::X;
         }
+
         wish_direction.0 = wish_direction.0.normalize_or_zero();
+
+        use_ability.0 = false;
+
+        // try fire ability
+        if ability.ticks_until_ready == 0 && keyboard_input.pressed(KeyCode::Space) {
+            use_ability.0 = true;
+            ability.ticks_until_ready = FIXED_TIME_STEP_HZ as u32; // 1 second
+        }
+
+        // decrement the ticks until ability ready
+        ability.ticks_until_ready = ability.ticks_until_ready.saturating_sub(1);
 
         let id = game_client_state.next_input_id;
         let acking_snapshot_id = game_client_state.last_world_snapshot_processed_id;
+
         game_client_state.input_history.push(PlayerInput {
             id,
             acking_snapshot_id,
             character_input: Some(CharacterInput {
                 wish_direction: wish_direction.0,
                 wish_yaw: 0.0,
+                predicted_ability: use_ability.0,
                 final_position: None,
             }),
             sends: 0,
@@ -258,6 +279,8 @@ fn try_apply_world_snapshot(
             &mut Transform,
             &mut Velocity,
             &mut WishDirection,
+            &mut UseAbility,
+            &mut Ability,
             &ReplicatedEntity,
         ),
         With<Character>,
@@ -287,10 +310,17 @@ fn try_apply_world_snapshot(
 
     for character_entity_snapshot in world_snapshot.character_entities.iter() {
         // find the character entity
-        if let Some((entity, transform, velocity, wish_direction, replicated_entity)) =
-            all_characters
-                .iter_mut()
-                .find(|(_, _, _, _, net_id)| net_id.net_id == character_entity_snapshot.id)
+        if let Some((
+            entity,
+            transform,
+            velocity,
+            wish_direction,
+            use_ability,
+            ability,
+            replicated_entity,
+        )) = all_characters
+            .iter_mut()
+            .find(|(_, _, _, _, _, _, net_id)| net_id.net_id == character_entity_snapshot.id)
         {
             let is_local = replicated_entity.owner_client_id == client_transport.client_id();
 
@@ -320,6 +350,8 @@ fn try_apply_world_snapshot(
                                             velocity.0 = new_velocity;
                                         }
 
+                                        let use_ability_before = use_ability.0;
+
                                         for input in game_client_state.input_history.iter_mut() {
                                             if input.id > acked_input_id {
                                                 client_debug_diagnostics.rollback_ticks += 1;
@@ -328,10 +360,13 @@ fn try_apply_world_snapshot(
                                                 {
                                                     wish_direction.0 =
                                                         character_input.wish_direction;
+                                                    use_ability.0 =
+                                                        character_input.predicted_ability;
                                                     update_character_velocity(
                                                         fixed_time,
                                                         velocity,
                                                         wish_direction,
+                                                        ability.recoil,
                                                     );
                                                     move_character(
                                                         fixed_time,
@@ -345,6 +380,8 @@ fn try_apply_world_snapshot(
                                                 }
                                             }
                                         }
+
+                                        use_ability.0 = use_ability_before;
                                     } else {
                                         debug!("no correction needed");
                                     }
