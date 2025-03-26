@@ -2,7 +2,12 @@ use avian3d::prelude::{Collider, ShapeCastConfig, SpatialQuery, SpatialQueryFilt
 use bevy::prelude::*;
 use bevy_renet::renet::ClientId;
 
-use crate::{components::{Character, LocallyControlled, ReplicatedEntity, RemoteControlled, Velocity, WishDirection}, net::{DespawnCharacterEvent, EntityNetId, SpawnCharacterEvent}};
+use crate::{
+    components::{
+        Character, LocallyControlled, RemoteControlled, ReplicatedEntity, Velocity, WishDirection,
+    },
+    net::{DespawnCharacterEvent, EntityNetId, SpawnCharacterEvent},
+};
 
 use super::shared::GameState;
 
@@ -12,15 +17,16 @@ impl Plugin for CharacterPlugin {
     fn build(&self, app: &mut App) {
         app.add_event::<SpawnCharacterEvent>();
         app.add_event::<DespawnCharacterEvent>();
-        app.add_systems(FixedUpdate, 
+        app.add_systems(
+            FixedUpdate,
             (
                 spawn_character_system,
                 despawn_character_system,
                 update_velocity_system,
-                move_character_system
+                move_character_system,
             )
-            .chain()
-            .run_if(in_state(GameState::Playing))
+                .chain()
+                .run_if(in_state(GameState::Playing)),
         );
     }
 }
@@ -31,11 +37,11 @@ fn spawn_character_system(
 ) {
     for event in spawn_character_event_reader.read() {
         spawn_character(
-            &mut commands, 
-            event.position, 
-            event.is_local, 
-            event.net_id, 
-            event.client_id
+            &mut commands,
+            event.position,
+            event.is_local,
+            event.net_id,
+            event.client_id,
         );
     }
 }
@@ -70,11 +76,11 @@ fn move_character_system(
 ) {
     for (entity, mut transform, mut velocity) in query.iter_mut() {
         move_character(
-            &fixed_time, 
-            &entity, 
-            &mut transform, 
-            &mut velocity, 
-            &spatial_query
+            &fixed_time,
+            &entity,
+            &mut transform,
+            &mut velocity,
+            &spatial_query,
         );
     }
 }
@@ -87,19 +93,19 @@ pub fn update_character_velocity(
     wish_direction: &WishDirection,
 ) {
     velocity.0 = apply_friction(
-        velocity.0, 
-        velocity.0.length(), 
-        5.0, 
-        fixed_time.delta_secs()
+        velocity.0,
+        velocity.0.length(),
+        5.0,
+        fixed_time.delta_secs(),
     );
 
     let current_speed = velocity.0.length();
     velocity.0 += accelerate(
-        wish_direction.0, 
-        20.0, 
-        current_speed, 
-        2.0, 
-        fixed_time.delta_secs()
+        wish_direction.0,
+        20.0,
+        current_speed,
+        2.0,
+        fixed_time.delta_secs(),
     );
 }
 
@@ -120,7 +126,6 @@ pub fn move_character(
     let mut remaining_motion = velocity.0 * fixed_time.delta_secs();
 
     for _ in 0..4 {
-
         if let Some(hit) = spatial_query.cast_shape(
             &collider,
             transform.translation,
@@ -158,17 +163,18 @@ pub fn spawn_character(
 ) {
     info!("Spawning character at: {:?}", position);
     // visuals are spawned in the shell
-    let new_entity = commands.spawn((
-        ReplicatedEntity {
-            net_id,
-            owner_client_id,
-        },
-        Character,
-        Velocity(Vec3::ZERO),
-        WishDirection(Vec3::ZERO),
-        Transform::default()
-            .with_translation(position),
-    )).id();
+    let new_entity = commands
+        .spawn((
+            ReplicatedEntity {
+                net_id,
+                owner_client_id,
+            },
+            Character,
+            Velocity(Vec3::ZERO),
+            WishDirection(Vec3::ZERO),
+            Transform::default().with_translation(position),
+        ))
+        .id();
 
     if is_local {
         commands.entity(new_entity).insert(LocallyControlled);
@@ -177,10 +183,7 @@ pub fn spawn_character(
     }
 }
 
-fn despawn_character(
-    commands: &mut Commands,
-    id: Entity,
-) {
+fn despawn_character(commands: &mut Commands, id: Entity) {
     commands.entity(id).despawn_recursive();
 }
 

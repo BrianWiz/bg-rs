@@ -2,7 +2,13 @@ use avian3d::PhysicsPlugins;
 use bevy::prelude::*;
 use clap::Parser;
 
-use super::{character::CharacterPlugin, client::{ClientPlugin, ConnectToServerEvent}, game_mode::GameModePlugin, map::MapPlugin, server::{HostServerEvent, ServerPlugin}};
+use super::{
+    character::CharacterPlugin,
+    client::{ClientPlugin, ConnectToServerEvent},
+    game_mode::GameModePlugin,
+    map::MapPlugin,
+    server::{HostServerEvent, ServerPlugin},
+};
 
 pub struct SharedPlugins;
 
@@ -54,13 +60,11 @@ fn setup_shared_system(
     next_state.set(GameState::Playing);
 
     if args.server {
-        host_server_events.send(HostServerEvent {
-            port: args.port,
-        });
+        host_server_events.send(HostServerEvent { port: args.port });
     } else {
-        connect_to_server_events.send(ConnectToServerEvent { 
-            server_ip: args.server_ip, 
-            server_port: args.port 
+        connect_to_server_events.send(ConnectToServerEvent {
+            server_ip: args.server_ip,
+            server_port: args.port,
         });
     }
 }
@@ -73,4 +77,3 @@ pub enum GameState {
     Playing,
     MainMenu,
 }
-

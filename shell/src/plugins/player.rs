@@ -1,6 +1,13 @@
-use core::{client::ClientDebugDiagnostics, components::{Character, LocallyControlled}};
+use core::{
+    client::ClientDebugDiagnostics,
+    components::{Character, LocallyControlled, Velocity, Visuals},
+};
 
-use bevy::{diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin}, prelude::*, window::PrimaryWindow};
+use bevy::{
+    diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin},
+    prelude::*,
+    window::PrimaryWindow,
+};
 
 const CAMERA_Y_OFFSET: f32 = 6.0;
 
@@ -10,10 +17,12 @@ impl Plugin for PlayerPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Startup, setup_player_system);
         app.add_systems(FixedPreUpdate, spawn_visuals_system);
-        app.add_systems(Update, camera_follow_system);
-        app.add_systems(Update, hud_metrics_system
-            .run_if(resource_exists::<ClientDebugDiagnostics>)
-            .run_if(resource_exists::<DiagnosticsStore>)
+        app.add_systems(Update, (camera_follow_system, update_visuals_system));
+        app.add_systems(
+            Update,
+            hud_metrics_system
+                .run_if(resource_exists::<ClientDebugDiagnostics>)
+                .run_if(resource_exists::<DiagnosticsStore>),
         );
     }
 }
@@ -36,14 +45,13 @@ fn setup_player_system(mut commands: Commands) {
     ));
 
     commands
-        .spawn(
-            Node {
-                position_type: PositionType::Relative,
-                width: Val::Percent(100.0),
-                height: Val::Percent(100.0),
-                ..default()
-            }
-        ).with_children(|parent| {
+        .spawn(Node {
+            position_type: PositionType::Relative,
+            width: Val::Percent(100.0),
+            height: Val::Percent(100.0),
+            ..default()
+        })
+        .with_children(|parent| {
             // Prediction metrics text
             parent.spawn((
                 HUDMetricsText,
@@ -66,15 +74,16 @@ fn hud_metrics_system(
     if let Some(prediction_metrics) = prediction_metrics {
         if let Ok(mut text) = text_query.get_single_mut() {
             if let Some(fps) = diagnostics.get(&FrameTimeDiagnosticsPlugin::FPS) {
-                text.0 = format!("FPS: {}\nRollbacks: {}\nRollback Ticks: {}",
+                text.0 = format!(
+                    "FPS: {}\nRollbacks: {}\nRollback Ticks: {}",
                     fps.smoothed().unwrap_or(0.0).round(),
                     prediction_metrics.rollback_count,
                     prediction_metrics.rollback_ticks
                 );
             } else {
-                text.0 = format!("Rollbacks: {}\nRollback Ticks: {}",
-                    prediction_metrics.rollback_count,
-                    prediction_metrics.rollback_ticks
+                text.0 = format!(
+                    "Rollbacks: {}\nRollback Ticks: {}",
+                    prediction_metrics.rollback_count, prediction_metrics.rollback_ticks
                 );
             }
         }
@@ -85,15 +94,39 @@ fn spawn_visuals_system(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
-    new_characters: Query<Entity, Added<Character>>,
+    new_characters: Query<(Entity, &Transform), Added<Character>>,
 ) {
-    for entity in new_characters.iter() {
-        commands.entity(entity).with_children(|parent| {
-            parent.spawn((
-                Mesh3d::from(meshes.add(Sphere::new(0.5))),
-                MeshMaterial3d(materials.add(Color::srgb(0.8, 0.1, 0.1))),
-            ));
-        });
+    for (entity, transform) in new_characters.iter() {
+        commands.spawn((
+            Visuals {
+                target: entity,
+                target_world_position: transform.translation,
+                last_world_position: transform.translation,
+            },
+            Mesh3d::from(meshes.add(Sphere::new(0.5))),
+            MeshMaterial3d(materials.add(Color::srgb(0.8, 0.1, 0.1))),
+        ));
+    }
+}
+
+fn update_visuals_system(
+    time: Res<Time>,
+    fixed_time: Res<Time<Fixed>>,
+    characters_query: Query<(&Transform, &Velocity), With<Character>>,
+    mut visuals_query: Query<(&mut Visuals, &mut Transform), Without<Character>>,
+) {
+    for (visuals, mut visuals_transform) in visuals_query.iter_mut() {
+        if let Ok((character_transform, character_velocity)) = characters_query.get(visuals.target)
+        {
+            let target_position_extrapolated = character_transform.translation.lerp(
+                character_transform.translation + character_velocity.0 * fixed_time.delta_secs(),
+                fixed_time.overstep_fraction(),
+            );
+
+            visuals_transform.translation = visuals_transform
+                .translation
+                .lerp(target_position_extrapolated, 22.0 * time.delta_secs());
+        }
     }
 }
 
@@ -101,31 +134,43 @@ fn camera_follow_system(
     time: Res<Time>,
     mut camera: Query<(&mut Transform, &GlobalTransform, &Camera), With<Camera3d>>,
     window: Query<&Window, With<PrimaryWindow>>,
-    character: Query<&GlobalTransform, (With<Character>, With<LocallyControlled>, Without<Camera3d>)>,
+    character: Query<
+        &GlobalTransform,
+        (With<Character>, With<LocallyControlled>, Without<Camera3d>),
+    >,
 ) {
-    if let (Ok(window), Ok((mut camera_transform, camera_global_transform, camera))) = (window.get_single(), camera.get_single_mut()) {
+    if let (Ok(window), Ok((mut camera_transform, camera_global_transform, camera))) =
+        (window.get_single(), camera.get_single_mut())
+    {
         if let Some(mouse_position) = window.cursor_position() {
-            if let Ok(mouse_ray) = camera.viewport_to_world(&camera_global_transform, mouse_position) {
-                if let Some(distance) = mouse_ray.intersect_plane(Vec3::ZERO, InfinitePlane3d { normal: Dir3::Y }) {
+            if let Ok(mouse_ray) =
+                camera.viewport_to_world(&camera_global_transform, mouse_position)
+            {
+                if let Some(distance) =
+                    mouse_ray.intersect_plane(Vec3::ZERO, InfinitePlane3d { normal: Dir3::Y })
+                {
                     let mouse_world_position = mouse_ray.origin + (mouse_ray.direction * distance);
 
                     if let Ok(character_transform) = character.get_single() {
                         let char_pos = character_transform.translation();
-                        
+
                         // First calculate the midpoint between character and mouse
                         let midpoint = (char_pos + mouse_world_position) * 0.5;
-                        
+
                         // Then limit this midpoint's distance from character if needed
                         let to_midpoint = midpoint - char_pos;
                         let max_distance = CAMERA_Y_OFFSET;
-                        
+
                         let limited_pos = if to_midpoint.length() > max_distance {
                             char_pos + to_midpoint.normalize() * max_distance
                         } else {
                             midpoint
                         };
 
-                        camera_transform.translation = camera_transform.translation.lerp(limited_pos + (Vec3::Y * CAMERA_Y_OFFSET),  8.0 * time.delta_secs());
+                        camera_transform.translation = camera_transform.translation.lerp(
+                            limited_pos + (Vec3::Y * CAMERA_Y_OFFSET),
+                            8.0 * time.delta_secs(),
+                        );
                     }
                 }
             }

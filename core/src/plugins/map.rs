@@ -1,6 +1,6 @@
 use avian3d::prelude::{ColliderConstructor, PhysicsDebugPlugin};
 use bevy::prelude::*;
-use bevy_trenchbroom::{config::TrenchBroomConfig, prelude::*, TrenchBroomPlugin};
+use bevy_trenchbroom::{TrenchBroomPlugin, config::TrenchBroomConfig, prelude::*};
 
 use super::shared::GameState;
 
@@ -39,8 +39,7 @@ fn spawn_test_map(
     commands.spawn((
         Mesh3d(meshes.add(Cuboid::new(100.0, 1.0, 100.0))),
         MeshMaterial3d(materials.add(Color::srgb(0.1, 0.1, 0.1))),
-        Transform::default()
-            .with_translation(Vec3::new(0.0, -0.5, 0.0)),
+        Transform::default().with_translation(Vec3::new(0.0, -0.5, 0.0)),
         ColliderConstructor::ConvexHullFromMesh,
     ));
 
@@ -48,8 +47,7 @@ fn spawn_test_map(
     commands.spawn((
         Mesh3d(meshes.add(Cuboid::new(1.0, 1.0, 1.0))),
         MeshMaterial3d(materials.add(Color::srgb(0.5, 0.5, 0.5))),
-        Transform::default()
-            .with_translation(Vec3::new(5.0, 0.5, 5.0)),
+        Transform::default().with_translation(Vec3::new(5.0, 0.5, 5.0)),
         ColliderConstructor::ConvexHullFromMesh,
     ));
 }
