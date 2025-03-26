@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use bevy_renet::renet::ClientId;
+use bevy_renet2::prelude::*;
 
 use crate::net::EntityNetId;
 

@@ -4,13 +4,13 @@ use std::{
 };
 
 use bevy::prelude::*;
-use bevy_renet::{
-    netcode::{
-        ClientAuthentication, NetcodeClientTransport, NetcodeServerTransport, ServerAuthentication,
-        ServerConfig,
-    },
-    renet::{ChannelConfig, ClientId, ConnectionConfig, RenetClient, RenetServer, SendType},
+use bevy_renet2::netcode::{
+    ClientAuthentication, NativeSocket, NetcodeClientPlugin, NetcodeClientTransport,
+    NetcodeServerPlugin, NetcodeServerTransport, NetcodeTransportError, ServerAuthentication,
+    ServerSetupConfig,
 };
+use bevy_renet2::prelude::*;
+
 use serde::{Deserialize, Serialize};
 
 pub type SnapshotId = u32;
@@ -154,15 +154,15 @@ pub fn start_server(commands: &mut Commands, port: u16) -> Result<(), Box<dyn st
     let local_addr = socket.local_addr()?;
     info!("Server socket successfully bound to: {}", local_addr);
 
-    let server_config = ServerConfig {
+    let server_config = ServerSetupConfig {
         current_time,
         max_clients: 64,
         protocol_id: 0,
-        public_addresses: vec![local_addr],
         authentication: ServerAuthentication::Unsecure,
+        socket_addresses: vec![vec![local_addr]],
     };
 
-    let transport = NetcodeServerTransport::new(server_config, socket)?;
+    let transport = NetcodeServerTransport::new(server_config, NativeSocket::new(socket)?)?;
     info!("Server transport created successfully");
 
     commands.insert_resource(transport);
@@ -182,12 +182,14 @@ pub fn connect_to_server(
         server_addr,
         user_data: None,
         protocol_id: 0,
+        socket_id: 0,
         client_id: current_time.as_millis() as u64,
     };
 
     let socket = UdpSocket::bind("127.0.0.1:0")?;
-    let transport = NetcodeClientTransport::new(current_time, authentication, socket)?;
-    let client = RenetClient::new(connection_config());
+    let transport =
+        NetcodeClientTransport::new(current_time, authentication, NativeSocket::new(socket)?)?;
+    let client = RenetClient::new(connection_config(), false);
 
     commands.insert_resource(transport);
     commands.insert_resource(client);
@@ -198,7 +200,7 @@ fn connection_config() -> ConnectionConfig {
     ConnectionConfig {
         server_channels_config: ServerChannel::config(),
         client_channels_config: ClientChannel::config(),
-        ..default()
+        available_bytes_per_tick: 60_000,
     }
 }
 

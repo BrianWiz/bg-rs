@@ -1,9 +1,8 @@
 use avian3d::prelude::SpatialQuery;
 use bevy::prelude::*;
-use bevy_renet::{
-    RenetClientPlugin,
+use bevy_renet2::{
     netcode::{NetcodeClientPlugin, NetcodeClientTransport},
-    renet::RenetClient,
+    prelude::*,
 };
 
 use crate::{

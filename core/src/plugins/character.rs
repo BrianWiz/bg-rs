@@ -1,6 +1,6 @@
 use avian3d::prelude::{Collider, ShapeCastConfig, SpatialQuery, SpatialQueryFilter};
 use bevy::prelude::*;
-use bevy_renet::renet::ClientId;
+use bevy_renet2::prelude::*;
 
 use crate::{
     components::{

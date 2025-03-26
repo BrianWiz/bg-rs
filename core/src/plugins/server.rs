@@ -1,9 +1,5 @@
 use bevy::{prelude::*, utils::HashMap};
-use bevy_renet::{
-    RenetServerPlugin,
-    netcode::NetcodeServerPlugin,
-    renet::{ClientId, RenetServer, ServerEvent},
-};
+use bevy_renet2::{netcode::NetcodeServerPlugin, prelude::*};
 
 use crate::{
     components::{Character, ReplicatedEntity, UseAbility, Velocity, WishDirection},
@@ -111,12 +107,6 @@ fn handle_client_input_system(
                 .input_buffer
                 .retain(|id, _| id > &last_processed_input_id);
         }
-
-        info!(
-            "Player {} has {} inputs in buffer",
-            client_id,
-            player.input_buffer.len()
-        );
 
         // handle processing client inputs
         if player.input_buffer.len() > MAX_INPUT_BUFFER_SIZE {
