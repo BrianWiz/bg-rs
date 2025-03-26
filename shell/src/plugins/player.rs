@@ -1,6 +1,7 @@
 use core::{
     client::ClientDebugDiagnostics,
     components::{Character, LocallyControlled, Velocity, Visuals},
+    shared::GameState,
 };
 
 use bevy::{
@@ -17,7 +18,10 @@ impl Plugin for PlayerPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Startup, setup_player_system);
         app.add_systems(FixedPreUpdate, spawn_visuals_system);
-        app.add_systems(Update, (camera_follow_system, update_visuals_system));
+        app.add_systems(
+            Update,
+            (camera_follow_system, update_visuals_system).run_if(in_state(GameState::Playing)),
+        );
         app.add_systems(
             Update,
             hud_metrics_system

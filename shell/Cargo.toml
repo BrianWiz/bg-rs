@@ -3,6 +3,10 @@ name = "shell"
 version = "0.1.0"
 edition = "2024"
 
+[[bin]]
+name = "brutal_grounds"
+path = "src/main.rs"
+
 [dependencies]
 bevy = { workspace = true }
 core = { path = "../core" }

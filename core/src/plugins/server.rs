@@ -265,14 +265,14 @@ fn send_world_snapshot_system(
                 };
 
             world_snapshot.acking_input_id = player.last_processed_input_id;
-        }
 
-        match bitcode::serialize(&world_snapshot) {
-            Ok(serialized) => {
-                renet_server.send_message(cid, ServerChannel::WorldSnapshot, serialized);
-            }
-            Err(e) => {
-                error!("Error serializing message: {}", e);
+            match bitcode::serialize(&world_snapshot) {
+                Ok(serialized) => {
+                    renet_server.send_message(cid, ServerChannel::WorldSnapshot, serialized);
+                }
+                Err(e) => {
+                    error!("Error serializing message: {}", e);
+                }
             }
         }
     }

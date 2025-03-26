@@ -162,6 +162,7 @@ pub fn spawn_character(
     owner_client_id: ClientId,
 ) {
     info!("Spawning character at: {:?}", position);
+
     // visuals are spawned in the shell
     let new_entity = commands
         .spawn((
