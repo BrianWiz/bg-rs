@@ -360,7 +360,6 @@ fn try_apply_world_snapshot(
                                                 {
                                                     wish_direction.0 =
                                                         character_input.wish_direction;
-
                                                     use_ability.0 =
                                                         character_input.predicted_ability;
                                                     update_character_velocity(

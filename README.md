@@ -1,2 +1,6 @@
-weapons & abilites:
-- [ ] dash: everyone has a double dash ability, like BG's dash but shorter
+multiplayer:
+- [ ] jitter buffer
+
+abilites:
+- [ ] dash
+
