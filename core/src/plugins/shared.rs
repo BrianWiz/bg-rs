@@ -30,15 +30,6 @@ pub struct CommandLineArgs {
 
 impl Plugin for SharedPlugins {
     fn build(&self, app: &mut App) {
-        #[cfg(not(feature = "headless"))]
-        app.add_plugins(DefaultPlugins.set(AssetPlugin {
-            file_path: "../assets".to_string(),
-            ..default()
-        }));
-
-        #[cfg(feature = "headless")]
-        app.add_plugins(MinimalPlugins);
-
         app.insert_resource(Time::<Fixed>::from_hz(FIXED_TIME_STEP_HZ));
         app.insert_state(GameState::Loading);
 

@@ -9,4 +9,5 @@ path = "src/main.rs"
 
 [dependencies]
 bevy = { workspace = true }
+bevy_trenchbroom = { workspace = true }
 core = { path = "../core" }
