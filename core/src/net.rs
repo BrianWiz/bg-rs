@@ -219,6 +219,9 @@ impl ClientChannel {
         vec![ChannelConfig {
             channel_id: 0,
             max_memory_usage_bytes: 5 * 1024 * 1024,
+            // send_type: SendType::ReliableOrdered {
+            //     resend_time: Duration::from_millis(2),
+            // },
             send_type: SendType::Unreliable,
         }]
     }
@@ -248,7 +251,7 @@ impl ServerChannel {
                 channel_id: 0,
                 max_memory_usage_bytes: 5 * 1024 * 1024,
                 send_type: SendType::ReliableOrdered {
-                    resend_time: Duration::from_millis(300),
+                    resend_time: Duration::from_millis(10),
                 },
             },
             // DespawnCharacter
@@ -256,7 +259,7 @@ impl ServerChannel {
                 channel_id: 1,
                 max_memory_usage_bytes: 5 * 1024 * 1024,
                 send_type: SendType::ReliableOrdered {
-                    resend_time: Duration::from_millis(300),
+                    resend_time: Duration::from_millis(10),
                 },
             },
             // WorldSnapshot

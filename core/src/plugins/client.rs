@@ -234,38 +234,6 @@ fn weapons_abilities_movement_system(
     }
 }
 
-fn send_input_system(
-    mut renet_client: ResMut<RenetClient>,
-    mut game_client_state: ResMut<GameClientState>,
-    locally_controlled_characters: Query<&mut Transform, With<LocallyControlled>>,
-) {
-    let mut final_position = None;
-    for transform in locally_controlled_characters.iter() {
-        final_position = Some(transform.translation);
-    }
-
-    for input in game_client_state.input_history.iter_mut() {
-        if input.sends < 1 {
-            // for only the first send, set the final position
-            if input.sends == 0 {
-                if let Some(character_input) = input.character_input.as_mut() {
-                    character_input.final_position = final_position;
-                }
-            }
-
-            match bitcode::serialize(&input) {
-                Ok(message) => {
-                    renet_client.send_message(ClientChannel::Input, message);
-                    input.sends += 1;
-                }
-                Err(e) => {
-                    error!("Failed to serialize message: {}", e);
-                }
-            }
-        }
-    }
-}
-
 fn try_apply_world_snapshot(
     fixed_time: &Time<Fixed>,
     client_debug_diagnostics: &mut ClientDebugDiagnostics,
@@ -416,5 +384,42 @@ fn apply_entity_snapshot(
 
     if let Some(new_velocity) = entity_snapshot.velocity {
         velocity.0 = new_velocity;
+    }
+}
+
+fn send_input_system(
+    mut renet_client: ResMut<RenetClient>,
+    mut game_client_state: ResMut<GameClientState>,
+    locally_controlled_characters: Query<&mut Transform, With<LocallyControlled>>,
+) {
+    let mut final_position = None;
+    for transform in locally_controlled_characters.iter() {
+        final_position = Some(transform.translation);
+    }
+
+    // Collect all inputs that need to be sent
+    let mut inputs_to_send = Vec::new();
+    for input in game_client_state.input_history.iter_mut() {
+        if input.sends < 3 {
+            if input.sends == 0 {
+                if let Some(character_input) = input.character_input.as_mut() {
+                    character_input.final_position = final_position;
+                }
+            }
+            inputs_to_send.push(input.clone());
+            input.sends += 1;
+        }
+    }
+
+    // Send all inputs in one message if we have any
+    if !inputs_to_send.is_empty() {
+        match bitcode::serialize(&inputs_to_send) {
+            Ok(message) => {
+                renet_client.send_message(ClientChannel::Input, message);
+            }
+            Err(e) => {
+                error!("Failed to serialize message: {}", e);
+            }
+        }
     }
 }

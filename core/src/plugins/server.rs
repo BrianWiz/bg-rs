@@ -13,6 +13,8 @@ use crate::{
     },
 };
 
+const MAX_INPUT_BUFFER_SIZE: usize = 6;
+
 pub struct ServerPlugin;
 
 impl Plugin for ServerPlugin {
@@ -42,6 +44,7 @@ impl Plugin for ServerPlugin {
 struct Player {
     last_acked_world_snapshot_id: Option<SnapshotId>,
     last_processed_input_id: Option<InputId>,
+    input_buffer: HashMap<InputId, PlayerInput>,
 }
 
 #[derive(Resource)]
@@ -81,30 +84,63 @@ fn handle_client_input_system(
         With<Character>,
     >,
 ) {
-    for client_id in renet_server.clients_id() {
-        if let Some(message) = renet_server.receive_message(client_id, ClientChannel::Input) {
-            match bitcode::deserialize::<PlayerInput>(&message) {
-                Ok(input) => {
-                    for (mut wish_direction, mut use_ability, replicated_entity) in
-                        characters.iter_mut()
-                    {
-                        if replicated_entity.owner_client_id == client_id {
-                            if let Some(character_input) = &input.character_input {
-                                wish_direction.0 = character_input.wish_direction;
-                                use_ability.0 = character_input.predicted_ability;
-
-                                if let Some(player) = game_server_state.players.get_mut(&client_id)
-                                {
-                                    player.last_processed_input_id = Some(input.id);
-                                    player.last_acked_world_snapshot_id = input.acking_snapshot_id;
-                                }
+    for (client_id, player) in game_server_state.players.iter_mut() {
+        // handle receiving inputs from the client
+        if let Some(message) = renet_server.receive_message(*client_id, ClientChannel::Input) {
+            match bitcode::deserialize::<Vec<PlayerInput>>(&message) {
+                Ok(inputs) => {
+                    for input in inputs {
+                        if let Some(last_processed_input_id) = player.last_processed_input_id {
+                            if input.id <= last_processed_input_id {
+                                continue;
                             }
                         }
+
+                        player.input_buffer.insert(input.id, input);
                     }
                 }
                 Err(e) => {
                     error!("Error deserializing message: {}", e);
                 }
+            }
+        }
+
+        // clean old inputs
+        if let Some(last_processed_input_id) = player.last_processed_input_id {
+            player
+                .input_buffer
+                .retain(|id, _| id > &last_processed_input_id);
+        }
+
+        info!(
+            "Player {} has {} inputs in buffer",
+            client_id,
+            player.input_buffer.len()
+        );
+
+        // handle processing client inputs
+        if player.input_buffer.len() > MAX_INPUT_BUFFER_SIZE {
+            let mut values = player.input_buffer.values().collect::<Vec<_>>();
+            values.sort_by_key(|input| input.id);
+
+            'loop_inputs: for input in values {
+                'loop_characters: for (mut wish_direction, mut use_ability, replicated_entity) in
+                    characters.iter_mut()
+                {
+                    if replicated_entity.owner_client_id == *client_id {
+                        if let Some(character_input) = &input.character_input {
+                            wish_direction.0 = character_input.wish_direction;
+                            use_ability.0 = character_input.predicted_ability;
+
+                            player.last_processed_input_id = Some(input.id);
+                            player.last_acked_world_snapshot_id = input.acking_snapshot_id;
+                            break 'loop_characters;
+                        }
+                    }
+                }
+
+                // only want to process one input per frame
+                break 'loop_inputs;
             }
         }
     }
@@ -128,6 +164,7 @@ fn handle_connection_system(
                     Player {
                         last_acked_world_snapshot_id: None,
                         last_processed_input_id: None,
+                        input_buffer: HashMap::new(),
                     },
                 );
 
