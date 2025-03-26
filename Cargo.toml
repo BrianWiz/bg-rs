@@ -3,10 +3,49 @@ members=["shell", "core"]
 resolver = "2"
 
 [workspace.dependencies]
+#####################################################
+# Game Engine
+#####################################################
+# Ok, I shouldn't have to explain this one :P
 bevy = { version = "0.15.2", features = ["serialize"] }
-bevy_trenchbroom = { version = "0.7.0", default-features = false, features = ["avian", "auto_register"] }
-bevy_renet2 = { version = "0.7.0", default-features = false, features = ["netcode", "native_transport"]}
-bitcode = { version = "0.6.6", features = ["derive", "serde"] }
-serde = { version = "1.0.219", features = ["derive"] }
+
+#####################################################
+# Physics Engine
+#####################################################
+# Used to simulate physics
 avian3d = "0.2.1"
+
+#####################################################
+# Maps
+#####################################################
+# Used to load maps in the Quake 1 format
+bevy_trenchbroom = { version = "0.7.0", default-features = false, features = ["avian", "auto_register"] }
+
+#####################################################
+# Navmesh and Pathfinding
+#####################################################
+# Used to generate navmeshes and find paths
+vleue_navigator = { version = "0.11.1", features = ["avian3d"] }
+
+#####################################################
+# Networking
+#####################################################
+# Used to send packets over the network
+bevy_renet2 = { version = "0.7.0", default-features = false, features = ["netcode", "native_transport"]}
+
+#####################################################
+# Serialization
+#####################################################
+# Used to serialize packets to be sent over the network
+# - I chose this over bincode because it packs things smaller
+#   - for example, an Option<> is serialized as a single bit instead of a byte
+bitcode = { version = "0.6.6", features = ["derive", "serde"] }
+
+# This is the main generic serialization library used in the project, bitcode implements it
+serde = { version = "1.0.219", features = ["derive"] }
+
+#####################################################
+# Command Line Interface
+#####################################################
+# Used to parse command line arguments
 clap = { version = "4.5.32", features = ["derive"] }

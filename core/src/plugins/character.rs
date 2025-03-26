@@ -10,6 +10,9 @@ use crate::{
     net::{DespawnCharacterEvent, EntityNetId, SpawnCharacterEvent},
 };
 
+pub const CHARACTER_GROUND_MARGIN: f32 = 0.01;
+pub const CHARACTER_PLANE: f32 = 0.5;
+pub const CHARACTER_Y: f32 = CHARACTER_PLANE + CHARACTER_GROUND_MARGIN;
 use super::shared::GameState;
 
 pub struct CharacterPlugin;
@@ -167,7 +170,7 @@ pub fn spawn_character(
     is_local: bool,
     net_id: EntityNetId,
     owner_client_id: ClientId,
-) {
+) -> Entity {
     info!("Spawning character at: {:?}", position);
 
     // visuals are spawned in the shell
@@ -194,6 +197,8 @@ pub fn spawn_character(
     } else {
         commands.entity(new_entity).insert(RemoteControlled);
     }
+
+    new_entity
 }
 
 fn despawn_character(commands: &mut Commands, id: Entity) {

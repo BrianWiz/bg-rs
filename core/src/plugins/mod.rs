@@ -1,3 +1,4 @@
+pub mod bot;
 pub mod character;
 pub mod client;
 pub mod game_mode;

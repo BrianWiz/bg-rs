@@ -3,6 +3,7 @@ use bevy::prelude::*;
 use clap::Parser;
 
 use super::{
+    bot::BotPlugin,
     character::CharacterPlugin,
     client::{ClientPlugin, ConnectToServerEvent},
     game_mode::GameModePlugin,
@@ -41,12 +42,16 @@ impl Plugin for SharedPlugins {
         app.insert_resource(Time::<Fixed>::from_hz(FIXED_TIME_STEP_HZ));
         app.insert_state(GameState::Loading);
 
-        app.add_plugins(PhysicsPlugins::default());
-        app.add_plugins(CharacterPlugin);
-        app.add_plugins(GameModePlugin);
-        app.add_plugins(MapPlugin);
         app.add_plugins(ServerPlugin);
         app.add_plugins(ClientPlugin);
+
+        app.add_plugins(PhysicsPlugins::default());
+        app.add_plugins(MapPlugin);
+
+        app.add_plugins(CharacterPlugin);
+        app.add_plugins(BotPlugin);
+
+        app.add_plugins(GameModePlugin);
         app.add_systems(Startup, setup_shared_system);
     }
 }
@@ -57,7 +62,6 @@ fn setup_shared_system(
     mut connect_to_server_events: EventWriter<ConnectToServerEvent>,
 ) {
     let args = CommandLineArgs::parse();
-    next_state.set(GameState::Playing);
 
     if args.server {
         host_server_events.send(HostServerEvent { port: args.port });
@@ -67,6 +71,8 @@ fn setup_shared_system(
             server_port: args.port,
         });
     }
+
+    next_state.set(GameState::Playing);
 }
 
 /// The state of the game. Duh.

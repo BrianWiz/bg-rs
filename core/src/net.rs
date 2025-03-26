@@ -13,9 +13,13 @@ use bevy_renet2::prelude::*;
 
 use serde::{Deserialize, Serialize};
 
+use crate::{is_nearly_equal_f32, is_nearly_equal_vec3};
+
 pub type SnapshotId = u32;
 pub type InputId = u32;
 pub type EntityNetId = u32;
+
+pub const SERVER_ID: ClientId = 0;
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct WorldSnapshot {
@@ -81,28 +85,6 @@ impl EntitySnapshot {
 
     fn is_empty(&self) -> bool {
         self.position.is_none() && self.velocity.is_none() && self.yaw.is_none()
-    }
-}
-
-fn is_nearly_equal(a: f32, b: f32) -> bool {
-    (a - b).abs() < 0.0001
-}
-
-fn is_nearly_equal_f32(a: Option<f32>, b: Option<f32>) -> bool {
-    match (a, b) {
-        (Some(a), Some(b)) => is_nearly_equal(a, b),
-        (None, None) => true,
-        _ => false,
-    }
-}
-
-fn is_nearly_equal_vec3(a: Option<Vec3>, b: Option<Vec3>) -> bool {
-    match (a, b) {
-        (Some(a), Some(b)) => {
-            is_nearly_equal(a.x, b.x) && is_nearly_equal(a.y, b.y) && is_nearly_equal(a.z, b.z)
-        }
-        (None, None) => true,
-        _ => false,
     }
 }
 
@@ -200,7 +182,7 @@ fn connection_config() -> ConnectionConfig {
     ConnectionConfig {
         server_channels_config: ServerChannel::config(),
         client_channels_config: ClientChannel::config(),
-        available_bytes_per_tick: 60_000,
+        available_bytes_per_tick: 64 * 1024,
     }
 }
 

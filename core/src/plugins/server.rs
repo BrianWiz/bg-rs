@@ -2,6 +2,7 @@ use bevy::{prelude::*, utils::HashMap};
 use bevy_renet2::{netcode::NetcodeServerPlugin, prelude::*};
 
 use crate::{
+    character::{CHARACTER_GROUND_MARGIN, CHARACTER_Y},
     components::{Character, ReplicatedEntity, UseAbility, Velocity, WishDirection},
     net::{
         ClientChannel, DespawnCharacterEvent, EntityNetId, EntitySnapshot, InputId, PlayerInput,
@@ -44,11 +45,25 @@ struct Player {
 }
 
 #[derive(Resource)]
-struct GameServerState {
+pub struct GameServerState {
     players: HashMap<ClientId, Player>,
     snapshot_history: Vec<WorldSnapshot>,
     next_world_snapshot_id: SnapshotId,
     next_entity_net_id: EntityNetId,
+}
+
+impl GameServerState {
+    pub fn pump_next_net_id(&mut self) -> EntityNetId {
+        let net_id = self.next_entity_net_id;
+        self.next_entity_net_id += 1;
+        net_id
+    }
+
+    pub fn pump_next_world_snapshot_id(&mut self) -> SnapshotId {
+        let id = self.next_world_snapshot_id;
+        self.next_world_snapshot_id += 1;
+        id
+    }
 }
 
 #[derive(Event)]
@@ -183,13 +198,12 @@ fn handle_connection_system(
 
                 // spawn their character
                 let character_spawn_event = SpawnCharacterEvent {
-                    net_id: game_server_state.next_entity_net_id,
+                    net_id: game_server_state.pump_next_net_id(),
                     client_id: *client_id,
-                    position: Vec3::new(0.0, 0.5, 0.0),
+                    position: Vec3::new(0.0, CHARACTER_Y, 0.0),
                     is_local: false,
                 };
                 character_spawn_events.send(character_spawn_event.clone());
-                game_server_state.next_entity_net_id += 1;
 
                 // tell every client about the new character
                 for cid in renet_server.clients_id() {
@@ -259,7 +273,7 @@ fn send_world_snapshot_system(
     characters: Query<(&Transform, &Velocity, &ReplicatedEntity), With<Character>>,
 ) {
     let mut world_snapshot = WorldSnapshot {
-        id: game_server_state.next_world_snapshot_id,
+        id: game_server_state.pump_next_world_snapshot_id(),
         acking_input_id: None,
         character_entities: Vec::new(),
     };
@@ -311,5 +325,4 @@ fn send_world_snapshot_system(
     }
 
     game_server_state.snapshot_history.push(world_snapshot);
-    game_server_state.next_world_snapshot_id += 1;
 }
