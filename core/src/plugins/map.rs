@@ -1,7 +1,12 @@
 use std::time::Duration;
 
 use avian3d::prelude::{Collider, ColliderConstructor, PhysicsDebugPlugin};
-use bevy::{color::palettes, prelude::*, time::common_conditions::on_timer};
+use bevy::{
+    color::palettes,
+    ecs::{component::ComponentId, world::DeferredWorld},
+    prelude::*,
+    time::common_conditions::on_timer,
+};
 use bevy_trenchbroom::prelude::*;
 use vleue_navigator::prelude::*;
 
@@ -17,9 +22,17 @@ pub struct MapPlugin;
 
 impl Plugin for MapPlugin {
     fn build(&self, app: &mut App) {
+        app.register_type::<StaticObstacle>();
+
         app.init_asset::<NavMesh>();
         app.add_plugins(VleueNavigatorPlugin);
-        app.add_plugins(NavmeshUpdaterPlugin::<Collider, Obstacle>::default());
+        app.add_plugins(NavmeshUpdaterPlugin::<Collider, StaticObstacle>::default());
+
+        app.add_plugins(TrenchBroomPlugin(
+            TrenchBroomConfig::new("brutal_grounds")
+                .no_bsp_lighting(true)
+                .assets_path("../assets"), // .register_class::<Worldspawn>(),
+        ));
 
         //app.add_plugins(PhysicsDebugPlugin::default());
         app.add_systems(Startup, spawn_test_map);
@@ -32,8 +45,9 @@ impl Plugin for MapPlugin {
     }
 }
 
-#[derive(Component)]
-struct Obstacle;
+#[derive(Component, Reflect)]
+#[reflect(Component)]
+struct StaticObstacle;
 
 fn spawn_test_map(
     mut commands: Commands,
@@ -42,7 +56,7 @@ fn spawn_test_map(
     asset_server: Res<AssetServer>,
 ) {
     // spawn a trenchbroom map
-    //commands.spawn(SceneRoot(asset_server.load("maps/unnamed.map#Scene")));
+    commands.spawn(SceneRoot(asset_server.load("maps/unnamed.map#Scene")));
 
     // spawn directional light pointing south east
     commands.spawn((
@@ -130,7 +144,12 @@ fn view_navmesh_system(
 }
 
 #[derive(SolidClass, Component, Reflect)]
-#[no_register]
 #[reflect(Component)]
 #[geometry(GeometryProvider::new().smooth_by_default_angle().convex_collider())]
+#[component(on_add = Self::on_add)]
 pub struct Worldspawn;
+impl Worldspawn {
+    pub fn on_add(mut world: DeferredWorld, entity: Entity, _id: ComponentId) {
+        world.commands().entity(entity).insert(StaticObstacle);
+    }
+}
