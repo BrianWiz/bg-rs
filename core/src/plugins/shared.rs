@@ -9,6 +9,7 @@ use super::{
     game_mode::GameModePlugin,
     map::MapPlugin,
     server::{HostServerEvent, ServerPlugin},
+    weapon::WeaponPlugin,
 };
 
 pub struct SharedPlugins;
@@ -30,6 +31,7 @@ pub struct CommandLineArgs {
 
 impl Plugin for SharedPlugins {
     fn build(&self, app: &mut App) {
+        app.init_resource::<Ticks>();
         app.insert_resource(Time::<Fixed>::from_hz(FIXED_TIME_STEP_HZ));
         app.insert_state(GameState::Loading);
 
@@ -41,10 +43,21 @@ impl Plugin for SharedPlugins {
 
         app.add_plugins(CharacterPlugin);
         app.add_plugins(BotPlugin);
+        app.add_plugins(WeaponPlugin);
 
         app.add_plugins(GameModePlugin);
         app.add_systems(Startup, setup_shared_system);
+        app.add_systems(FixedPreUpdate, update_ticks_system);
     }
+}
+
+#[derive(Resource, Default)]
+pub struct Ticks {
+    pub ticks: u32,
+}
+
+fn update_ticks_system(mut ticks: ResMut<Ticks>) {
+    ticks.ticks += 1;
 }
 
 fn setup_shared_system(

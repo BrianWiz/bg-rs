@@ -1,5 +1,5 @@
 use avian3d::prelude::SpatialQuery;
-use bevy::prelude::*;
+use bevy::{prelude::*, window::PrimaryWindow};
 use bevy_renet2::{
     netcode::{NetcodeClientPlugin, NetcodeClientTransport},
     prelude::*,
@@ -8,8 +8,8 @@ use bevy_renet2::{
 use crate::{
     character::{move_character, update_character_velocity},
     components::{
-        Ability, Character, LocallyControlled, ReplicatedEntity, UseAbility, Velocity,
-        WishDirection,
+        Ability, AimYaw, Character, LocallyControlled, ReplicatedEntity, UseAbility, Velocity,
+        WeaponWishFire, WishDirection,
     },
     net::{
         CharacterInput, ClientChannel, DespawnCharacterEvent, EntitySnapshot, InputId, PlayerInput,
@@ -44,7 +44,7 @@ impl Plugin for ClientPlugin {
         );
         app.add_systems(
             FixedPreUpdate,
-            weapons_abilities_movement_system.run_if(resource_exists::<RenetClient>),
+            controls_system.run_if(resource_exists::<RenetClient>),
         );
         app.add_systems(
             FixedPostUpdate,
@@ -177,12 +177,33 @@ fn handle_server_messages_system(
 
 /// Handles weapons, abilities and movement.
 /// We do this all in one system because weapons and movement go hand in hand.
-fn weapons_abilities_movement_system(
-    mut game_client_state: ResMut<GameClientState>,
+fn controls_system(
+    window: Query<&Window, With<PrimaryWindow>>,
+    camera: Query<(&GlobalTransform, &Camera), With<Camera3d>>,
+    mouse_input: Res<ButtonInput<MouseButton>>,
     keyboard_input: Res<ButtonInput<KeyCode>>,
-    mut query: Query<(&mut WishDirection, &mut UseAbility, &mut Ability), With<LocallyControlled>>,
+    mut game_client_state: ResMut<GameClientState>,
+    mut locally_controlled_characters: Query<
+        (
+            &mut Transform,
+            &mut WishDirection,
+            &mut UseAbility,
+            &mut Ability,
+            &mut WeaponWishFire,
+            &mut AimYaw,
+        ),
+        (With<LocallyControlled>, With<Character>),
+    >,
 ) {
-    for (mut wish_direction, mut use_ability, mut ability) in query.iter_mut() {
+    if let Ok((
+        mut character_transform,
+        mut wish_direction,
+        mut use_ability,
+        mut ability,
+        mut weapon_wish_fire,
+        mut aim_yaw,
+    )) = locally_controlled_characters.get_single_mut()
+    {
         wish_direction.0 = Vec3::ZERO;
         if keyboard_input.pressed(KeyCode::KeyW) {
             wish_direction.0 += Vec3::NEG_Z;
@@ -197,8 +218,33 @@ fn weapons_abilities_movement_system(
             wish_direction.0 += Vec3::X;
         }
 
+        // Figure out aim direction
+        if let (Ok(window), Ok((camera_global_transform, camera))) =
+            (window.get_single(), camera.get_single())
+        {
+            if let Some(mouse_position) = window.cursor_position() {
+                if let Ok(mouse_ray) =
+                    camera.viewport_to_world(&camera_global_transform, mouse_position)
+                {
+                    if let Some(distance) =
+                        mouse_ray.intersect_plane(Vec3::ZERO, InfinitePlane3d { normal: Dir3::Y })
+                    {
+                        let mouse_world_position =
+                            mouse_ray.origin + (mouse_ray.direction * distance);
+                        let aim_direction =
+                            (mouse_world_position - character_transform.translation).normalize();
+                        aim_yaw.0 = aim_direction.x.atan2(aim_direction.z);
+                    }
+                }
+            }
+        }
+
         wish_direction.0 = wish_direction.0.normalize_or_zero();
 
+        // try fire weapon
+        weapon_wish_fire.0 = mouse_input.pressed(MouseButton::Left);
+
+        // @todo-brian: move this ability shit out of here
         use_ability.0 = false;
 
         // try fire ability
@@ -206,7 +252,6 @@ fn weapons_abilities_movement_system(
             use_ability.0 = true;
             ability.ticks_until_ready = FIXED_TIME_STEP_HZ as u32; // 1 second
         }
-
         // decrement the ticks until ability ready
         ability.ticks_until_ready = ability.ticks_until_ready.saturating_sub(1);
 
@@ -218,8 +263,9 @@ fn weapons_abilities_movement_system(
             acking_snapshot_id,
             character_input: Some(CharacterInput {
                 wish_direction: wish_direction.0,
-                wish_yaw: 0.0,
+                aim_yaw: aim_yaw.0,
                 predicted_ability: use_ability.0,
+                weapon_wish_fire: weapon_wish_fire.0,
                 final_position: None,
             }),
             sends: 0,

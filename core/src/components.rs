@@ -26,7 +26,7 @@ pub struct Visuals {
 #[derive(Component)]
 pub struct WishDirection(pub Vec3);
 
-/// A wish ability is a boolean that indicates whether the entity wants to use its ability.
+/// Whether to actually attempt to use the ability or not.
 #[derive(Component)]
 pub struct UseAbility(pub bool);
 
@@ -44,3 +44,25 @@ pub struct Ability {
     pub ticks_until_ready: u32,
     pub recoil: Option<f32>,
 }
+
+#[derive(Component)]
+pub struct Weapon {
+    /// The number of ticks between each shot.
+    pub fire_rate_ticks: u32,
+    /// The force of the recoil, if any. Applied to the entity's velocity by pushing them back.
+    pub recoil: Option<f32>,
+}
+
+#[derive(Component, Default)]
+pub struct WeaponState {
+    /// The next tick that the weapon can fire. Must be at this tick, or later for it to fire.
+    pub next_fire_tick: u32,
+}
+
+/// Whether the entity wishes to fire their weapon or not.
+#[derive(Component)]
+pub struct WeaponWishFire(pub bool);
+
+/// The yaw of the entity's aim. The direction they'd be shooting in.
+#[derive(Component)]
+pub struct AimYaw(pub f32);

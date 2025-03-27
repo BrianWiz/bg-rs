@@ -4,8 +4,8 @@ use bevy_renet2::prelude::*;
 
 use crate::{
     components::{
-        Ability, Character, LocallyControlled, RemoteControlled, ReplicatedEntity, UseAbility,
-        Velocity, WishDirection,
+        Ability, AimYaw, Character, LocallyControlled, RemoteControlled, ReplicatedEntity,
+        UseAbility, Velocity, Weapon, WeaponState, WeaponWishFire, WishDirection,
     },
     net::{DespawnCharacterEvent, EntityNetId, SpawnCharacterEvent},
 };
@@ -188,6 +188,13 @@ pub fn spawn_character(
                 ticks_until_ready: 0,
                 recoil: Some(20.0),
             },
+            Weapon {
+                fire_rate_ticks: 10,
+                recoil: Some(1.0),
+            },
+            WeaponState::default(),
+            WeaponWishFire(false),
+            AimYaw(0.0),
             Transform::default().with_translation(position),
         ))
         .id();
