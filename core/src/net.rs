@@ -108,7 +108,6 @@ pub struct CharacterInput {
     //////////////////////////////////////////////
     pub wish_direction: Vec3,
     pub aim_yaw: f32,
-    pub predicted_ability: bool,
     pub weapon_wish_fire: bool,
 
     //////////////////////////////////////////////

@@ -3,9 +3,7 @@ use bevy_renet2::{netcode::NetcodeServerPlugin, prelude::*};
 
 use crate::{
     character::{CHARACTER_GROUND_MARGIN, CHARACTER_Y},
-    components::{
-        AimYaw, Character, ReplicatedEntity, UseAbility, Velocity, WeaponWishFire, WishDirection,
-    },
+    components::{AimYaw, Character, ReplicatedEntity, Velocity, WeaponWishFire, WishDirection},
     net::{
         ClientChannel, DespawnCharacterEvent, EntityNetId, EntitySnapshot, InputId, PlayerInput,
         ServerChannel, SnapshotId, SpawnCharacterEvent, WorldSnapshot, start_server,
@@ -95,7 +93,6 @@ fn handle_client_input_system(
     mut characters: Query<
         (
             &mut WishDirection,
-            &mut UseAbility,
             &mut WeaponWishFire,
             &mut AimYaw,
             &ReplicatedEntity,
@@ -139,7 +136,6 @@ fn handle_client_input_system(
             'loop_inputs: for input in values {
                 'loop_characters: for (
                     mut wish_direction,
-                    mut use_ability,
                     mut weapon_wish_fire,
                     mut aim_yaw,
                     replicated_entity,
@@ -148,7 +144,6 @@ fn handle_client_input_system(
                     if replicated_entity.owner_client_id == *client_id {
                         if let Some(character_input) = &input.character_input {
                             wish_direction.0 = character_input.wish_direction;
-                            use_ability.0 = character_input.predicted_ability;
                             weapon_wish_fire.0 = character_input.weapon_wish_fire;
                             aim_yaw.0 = character_input.aim_yaw;
                             player.last_processed_input_id = Some(input.id);

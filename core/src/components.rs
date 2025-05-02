@@ -26,10 +26,6 @@ pub struct Visuals {
 #[derive(Component)]
 pub struct WishDirection(pub Vec3);
 
-/// Whether to actually attempt to use the ability or not.
-#[derive(Component)]
-pub struct UseAbility(pub bool);
-
 /// A replicated entity. All entities that are replicated over the network need this component.
 #[derive(Component)]
 pub struct ReplicatedEntity {
@@ -37,12 +33,6 @@ pub struct ReplicatedEntity {
     pub net_id: EntityNetId,
     /// The renet client id of the owner of the entity.
     pub owner_client_id: ClientId,
-}
-
-#[derive(Component)]
-pub struct Ability {
-    pub ticks_until_ready: u32,
-    pub recoil: Option<f32>,
 }
 
 #[derive(Component)]

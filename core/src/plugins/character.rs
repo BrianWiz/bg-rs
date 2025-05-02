@@ -4,8 +4,8 @@ use bevy_renet2::prelude::*;
 
 use crate::{
     components::{
-        Ability, AimYaw, Character, LocallyControlled, RemoteControlled, ReplicatedEntity,
-        UseAbility, Velocity, Weapon, WeaponState, WeaponWishFire, WishDirection,
+        AimYaw, Character, LocallyControlled, RemoteControlled, ReplicatedEntity, Velocity, Weapon,
+        WeaponState, WeaponWishFire, WishDirection,
     },
     net::{DespawnCharacterEvent, EntityNetId, SpawnCharacterEvent},
 };
@@ -66,11 +66,10 @@ fn despawn_character_system(
 
 fn update_velocity_system(
     fixed_time: Res<Time<Fixed>>,
-    mut query: Query<(&mut Velocity, &WishDirection, &UseAbility, &Ability), With<Character>>,
+    mut query: Query<(&mut Velocity, &WishDirection), With<Character>>,
 ) {
-    for (mut velocity, wish_direction, use_ability, ability) in query.iter_mut() {
-        let recoil = if use_ability.0 { ability.recoil } else { None };
-        update_character_velocity(&fixed_time, &mut velocity, wish_direction, recoil);
+    for (mut velocity, wish_direction) in query.iter_mut() {
+        update_character_velocity(&fixed_time, &mut velocity, wish_direction, None);
     }
 }
 
@@ -92,6 +91,7 @@ fn move_character_system(
 
 ////////////////////////////////////////////////////////
 /// Updates the velocity based on the wish direction.
+////////////////////////////////////////////////////////
 pub fn update_character_velocity(
     fixed_time: &Time<Fixed>,
     velocity: &mut Velocity,
@@ -122,6 +122,7 @@ pub fn update_character_velocity(
 ////////////////////////////////////////////////////////
 /// Moves the character based on the velocity.
 /// Will collide with walls, and slide along them.
+////////////////////////////////////////////////////////
 pub fn move_character(
     fixed_time: &Time<Fixed>,
     entity: &Entity,
@@ -130,32 +131,36 @@ pub fn move_character(
     spatial_query: &SpatialQuery,
 ) {
     const EPSILON: f32 = 0.001;
+    const MAX_ITERATIONS: usize = 4;
 
     let collider = Collider::sphere(0.5);
+    let mut remaining_time = fixed_time.delta_secs();
 
-    let mut remaining_motion = velocity.0 * fixed_time.delta_secs();
+    for _ in 0..MAX_ITERATIONS {
+        let wish_motion = velocity.0 * remaining_time;
 
-    for _ in 0..4 {
         if let Some(hit) = spatial_query.cast_shape(
             &collider,
             transform.translation,
             Quat::default(),
-            Dir3::new(remaining_motion.normalize_or_zero()).unwrap_or(Dir3::X),
-            &ShapeCastConfig::from_max_distance(remaining_motion.length()),
+            Dir3::new(wish_motion.normalize_or_zero()).unwrap_or(Dir3::X),
+            &ShapeCastConfig::from_max_distance(wish_motion.length()),
             &SpatialQueryFilter::default().with_excluded_entities([*entity]),
         ) {
             // Move to just before the collision point
-            transform.translation += remaining_motion.normalize_or_zero() * hit.distance;
+            transform.translation += wish_motion.normalize_or_zero() * hit.distance;
 
             // Prevents sticking
             transform.translation += hit.normal1 * EPSILON;
 
-            // Deflect velocity along the surface
-            velocity.0 -= hit.normal1 * velocity.0.dot(hit.normal1);
-            remaining_motion -= hit.normal1 * remaining_motion.dot(hit.normal1);
+            // Project velocity onto the wall plane
+            velocity.0 = velocity.0 - (hit.normal1 * velocity.0.dot(hit.normal1));
+
+            // Scale remaining time based on collision fraction
+            remaining_time *= 1.0 - hit.distance / wish_motion.length();
         } else {
             // No collision, move the full distance
-            transform.translation += remaining_motion;
+            transform.translation += wish_motion;
             break;
         }
     }
@@ -164,6 +169,7 @@ pub fn move_character(
 ////////////////////////////////////////////////////////
 /// Spawns a character at the provided position.
 /// If is_local is true, the character will be marked as locally controlled.
+////////////////////////////////////////////////////////
 pub fn spawn_character(
     commands: &mut Commands,
     position: Vec3,
@@ -183,11 +189,6 @@ pub fn spawn_character(
             Character,
             Velocity(Vec3::ZERO),
             WishDirection(Vec3::ZERO),
-            UseAbility(false),
-            Ability {
-                ticks_until_ready: 0,
-                recoil: Some(20.0),
-            },
             Weapon {
                 fire_rate_ticks: 10,
                 recoil: Some(1.0),
@@ -214,6 +215,7 @@ fn despawn_character(commands: &mut Commands, id: Entity) {
 
 ////////////////////////////////////////////////////////
 /// Applies friction to the velocity.
+////////////////////////////////////////////////////////
 fn apply_friction(velocity: Vec3, current_speed: f32, drag: f32, delta_seconds: f32) -> Vec3 {
     let mut new_speed;
     let mut drop = 0.0;
@@ -234,6 +236,7 @@ fn apply_friction(velocity: Vec3, current_speed: f32, drag: f32, delta_seconds: 
 
 ////////////////////////////////////////////////////////
 /// Accelerates the character towards the wish speed.
+////////////////////////////////////////////////////////
 fn accelerate(
     wish_direction: Vec3,
     wish_speed: f32,
