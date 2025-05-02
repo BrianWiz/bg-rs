@@ -1,5 +1,5 @@
 use avian3d::prelude::SpatialQuery;
-use bevy::prelude::*;
+use bevy::{prelude::*, window::PrimaryWindow};
 use bevy_renet2::{
     netcode::{NetcodeClientPlugin, NetcodeClientTransport},
     prelude::*,
@@ -8,7 +8,7 @@ use bevy_renet2::{
 use crate::{
     character::{move_character, update_character_velocity},
     components::{
-        Ability, Character, LocallyControlled, ReplicatedEntity, UseAbility, Velocity,
+        AimYaw, Character, LocallyControlled, ReplicatedEntity, Velocity, WeaponWishFire,
         WishDirection,
     },
     net::{
@@ -44,7 +44,7 @@ impl Plugin for ClientPlugin {
         );
         app.add_systems(
             FixedPreUpdate,
-            weapons_abilities_movement_system.run_if(resource_exists::<RenetClient>),
+            controls_system.run_if(resource_exists::<RenetClient>),
         );
         app.add_systems(
             FixedPostUpdate,
@@ -65,6 +65,14 @@ struct GameClientState {
     next_input_id: InputId,
     last_world_snapshot_processed_id: Option<SnapshotId>,
     is_connecting: bool,
+}
+
+impl GameClientState {
+    pub fn pump_next_input_id(&mut self) -> InputId {
+        let id = self.next_input_id;
+        self.next_input_id += 1;
+        id
+    }
 }
 
 #[derive(Event)]
@@ -114,8 +122,6 @@ fn handle_server_messages_system(
             &mut Transform,
             &mut Velocity,
             &mut WishDirection,
-            &mut UseAbility,
-            &mut Ability,
             &ReplicatedEntity,
         ),
         With<Character>,
@@ -177,12 +183,25 @@ fn handle_server_messages_system(
 
 /// Handles weapons, abilities and movement.
 /// We do this all in one system because weapons and movement go hand in hand.
-fn weapons_abilities_movement_system(
-    mut game_client_state: ResMut<GameClientState>,
+fn controls_system(
+    window: Query<&Window, With<PrimaryWindow>>,
+    camera: Query<(&GlobalTransform, &Camera), With<Camera3d>>,
+    mouse_input: Res<ButtonInput<MouseButton>>,
     keyboard_input: Res<ButtonInput<KeyCode>>,
-    mut query: Query<(&mut WishDirection, &mut UseAbility, &mut Ability), With<LocallyControlled>>,
+    mut game_client_state: ResMut<GameClientState>,
+    mut locally_controlled_characters: Query<
+        (
+            &mut Transform,
+            &mut WishDirection,
+            &mut WeaponWishFire,
+            &mut AimYaw,
+        ),
+        (With<LocallyControlled>, With<Character>),
+    >,
 ) {
-    for (mut wish_direction, mut use_ability, mut ability) in query.iter_mut() {
+    if let Ok((mut character_transform, mut wish_direction, mut weapon_wish_fire, mut aim_yaw)) =
+        locally_controlled_characters.get_single_mut()
+    {
         wish_direction.0 = Vec3::ZERO;
         if keyboard_input.pressed(KeyCode::KeyW) {
             wish_direction.0 += Vec3::NEG_Z;
@@ -197,20 +216,32 @@ fn weapons_abilities_movement_system(
             wish_direction.0 += Vec3::X;
         }
 
-        wish_direction.0 = wish_direction.0.normalize_or_zero();
-
-        use_ability.0 = false;
-
-        // try fire ability
-        if ability.ticks_until_ready == 0 && keyboard_input.pressed(KeyCode::Space) {
-            use_ability.0 = true;
-            ability.ticks_until_ready = FIXED_TIME_STEP_HZ as u32; // 1 second
+        // Figure out aim direction
+        if let (Ok(window), Ok((camera_global_transform, camera))) =
+            (window.get_single(), camera.get_single())
+        {
+            if let Some(mouse_position) = window.cursor_position() {
+                if let Ok(mouse_ray) =
+                    camera.viewport_to_world(&camera_global_transform, mouse_position)
+                {
+                    if let Some(distance) =
+                        mouse_ray.intersect_plane(Vec3::ZERO, InfinitePlane3d { normal: Dir3::Y })
+                    {
+                        let mouse_world_position =
+                            mouse_ray.origin + (mouse_ray.direction * distance);
+                        let aim_direction =
+                            (mouse_world_position - character_transform.translation).normalize();
+                        aim_yaw.0 = aim_direction.x.atan2(aim_direction.z);
+                    }
+                }
+            }
         }
 
-        // decrement the ticks until ability ready
-        ability.ticks_until_ready = ability.ticks_until_ready.saturating_sub(1);
+        wish_direction.0 = wish_direction.0.normalize_or_zero();
 
-        let id = game_client_state.next_input_id;
+        weapon_wish_fire.0 = mouse_input.pressed(MouseButton::Left);
+
+        let id = game_client_state.pump_next_input_id();
         let acking_snapshot_id = game_client_state.last_world_snapshot_processed_id;
 
         game_client_state.input_history.push(PlayerInput {
@@ -218,13 +249,12 @@ fn weapons_abilities_movement_system(
             acking_snapshot_id,
             character_input: Some(CharacterInput {
                 wish_direction: wish_direction.0,
-                wish_yaw: 0.0,
-                predicted_ability: use_ability.0,
+                aim_yaw: aim_yaw.0,
+                weapon_wish_fire: weapon_wish_fire.0,
                 final_position: None,
             }),
             sends: 0,
         });
-        game_client_state.next_input_id += 1;
     }
 
     // retain 1 second of inputs, we're running at 128hz (or whatever is configured, see FIXED_TIME_STEP_HZ)
@@ -246,8 +276,6 @@ fn try_apply_world_snapshot(
             &mut Transform,
             &mut Velocity,
             &mut WishDirection,
-            &mut UseAbility,
-            &mut Ability,
             &ReplicatedEntity,
         ),
         With<Character>,
@@ -277,17 +305,10 @@ fn try_apply_world_snapshot(
 
     for character_entity_snapshot in world_snapshot.character_entities.iter() {
         // find the character entity
-        if let Some((
-            entity,
-            transform,
-            velocity,
-            wish_direction,
-            use_ability,
-            ability,
-            replicated_entity,
-        )) = all_characters
-            .iter_mut()
-            .find(|(_, _, _, _, _, _, net_id)| net_id.net_id == character_entity_snapshot.id)
+        if let Some((entity, transform, velocity, wish_direction, replicated_entity)) =
+            all_characters
+                .iter_mut()
+                .find(|(_, _, _, _, net_id)| net_id.net_id == character_entity_snapshot.id)
         {
             let is_local = replicated_entity.owner_client_id == client_transport.client_id();
 
@@ -317,8 +338,6 @@ fn try_apply_world_snapshot(
                                             velocity.0 = new_velocity;
                                         }
 
-                                        let use_ability_before = use_ability.0;
-
                                         for input in game_client_state.input_history.iter_mut() {
                                             if input.id > acked_input_id {
                                                 client_debug_diagnostics.rollback_ticks += 1;
@@ -327,17 +346,11 @@ fn try_apply_world_snapshot(
                                                 {
                                                     wish_direction.0 =
                                                         character_input.wish_direction;
-                                                    use_ability.0 =
-                                                        character_input.predicted_ability;
                                                     update_character_velocity(
                                                         fixed_time,
                                                         velocity,
                                                         wish_direction,
-                                                        if use_ability.0 {
-                                                            ability.recoil
-                                                        } else {
-                                                            None
-                                                        },
+                                                        None,
                                                     );
                                                     move_character(
                                                         fixed_time,
@@ -351,8 +364,6 @@ fn try_apply_world_snapshot(
                                                 }
                                             }
                                         }
-
-                                        use_ability.0 = use_ability_before;
                                     } else {
                                         debug!("no correction needed");
                                     }

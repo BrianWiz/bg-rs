@@ -3,7 +3,7 @@ use bevy_renet2::{netcode::NetcodeServerPlugin, prelude::*};
 
 use crate::{
     character::{CHARACTER_GROUND_MARGIN, CHARACTER_Y},
-    components::{Character, ReplicatedEntity, UseAbility, Velocity, WishDirection},
+    components::{AimYaw, Character, ReplicatedEntity, Velocity, WeaponWishFire, WishDirection},
     net::{
         ClientChannel, DespawnCharacterEvent, EntityNetId, EntitySnapshot, InputId, PlayerInput,
         ServerChannel, SnapshotId, SpawnCharacterEvent, WorldSnapshot, start_server,
@@ -91,7 +91,12 @@ fn handle_client_input_system(
     mut game_server_state: ResMut<GameServerState>,
     mut renet_server: ResMut<RenetServer>,
     mut characters: Query<
-        (&mut WishDirection, &mut UseAbility, &ReplicatedEntity),
+        (
+            &mut WishDirection,
+            &mut WeaponWishFire,
+            &mut AimYaw,
+            &ReplicatedEntity,
+        ),
         With<Character>,
     >,
 ) {
@@ -129,14 +134,18 @@ fn handle_client_input_system(
             values.sort_by_key(|input| input.id);
 
             'loop_inputs: for input in values {
-                'loop_characters: for (mut wish_direction, mut use_ability, replicated_entity) in
-                    characters.iter_mut()
+                'loop_characters: for (
+                    mut wish_direction,
+                    mut weapon_wish_fire,
+                    mut aim_yaw,
+                    replicated_entity,
+                ) in characters.iter_mut()
                 {
                     if replicated_entity.owner_client_id == *client_id {
                         if let Some(character_input) = &input.character_input {
                             wish_direction.0 = character_input.wish_direction;
-                            use_ability.0 = character_input.predicted_ability;
-
+                            weapon_wish_fire.0 = character_input.weapon_wish_fire;
+                            aim_yaw.0 = character_input.aim_yaw;
                             player.last_processed_input_id = Some(input.id);
                             player.last_acked_world_snapshot_id = input.acking_snapshot_id;
                             break 'loop_characters;

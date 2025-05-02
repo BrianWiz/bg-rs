@@ -7,19 +7,20 @@ resolver = "2"
 # Game Engine
 #####################################################
 # Ok, I shouldn't have to explain this one :P
-bevy = { version = "0.15.2", features = ["serialize"] }
+bevy = { version = "0.15.3", features = ["serialize"] }
 
 #####################################################
 # Physics Engine
 #####################################################
-# Used to simulate physics
+# I chose this over Rapier3d because it's more in line with Bevy's design philosophy
+# And I found that the SpatialQuery is more accurate than Rapier's
 avian3d = "0.2.1"
 
 #####################################################
 # Maps
 #####################################################
 # Used to load maps in the Quake 1 format
-bevy_trenchbroom = { version = "0.7.0", default-features = false, features = ["avian", "auto_register"] }
+bevy_trenchbroom = { version = "0.7.0", default-features = false, features = ["client","avian", "auto_register"] }
 
 #####################################################
 # Navmesh and Pathfinding

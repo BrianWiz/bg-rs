@@ -107,8 +107,8 @@ pub struct CharacterInput {
     // networked
     //////////////////////////////////////////////
     pub wish_direction: Vec3,
-    pub wish_yaw: f32,
-    pub predicted_ability: bool,
+    pub aim_yaw: f32,
+    pub weapon_wish_fire: bool,
 
     //////////////////////////////////////////////
     // non-networked
