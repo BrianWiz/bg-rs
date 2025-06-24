@@ -200,7 +200,7 @@ fn controls_system(
     >,
 ) {
     if let Ok((mut character_transform, mut wish_direction, mut weapon_wish_fire, mut aim_yaw)) =
-        locally_controlled_characters.get_single_mut()
+        locally_controlled_characters.single_mut()
     {
         wish_direction.0 = Vec3::ZERO;
         if keyboard_input.pressed(KeyCode::KeyW) {
@@ -218,7 +218,7 @@ fn controls_system(
 
         // Figure out aim direction
         if let (Ok(window), Ok((camera_global_transform, camera))) =
-            (window.get_single(), camera.get_single())
+            (window.single(), camera.single())
         {
             if let Some(mouse_position) = window.cursor_position() {
                 if let Ok(mouse_ray) =

@@ -1,7 +1,6 @@
 mod plugins;
 
 use bevy::{diagnostic::FrameTimeDiagnosticsPlugin, prelude::*};
-use bevy_trenchbroom::prelude::*;
 use core::shared::SharedPlugins;
 
 fn main() {
@@ -16,7 +15,7 @@ fn main() {
             ..default()
         }))
         .add_plugins(SharedPlugins)
-        .add_plugins(FrameTimeDiagnosticsPlugin)
+        .add_plugins(FrameTimeDiagnosticsPlugin::default())
         .add_plugins(plugins::player::PlayerPlugin)
         .run();
 }

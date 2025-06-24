@@ -76,7 +76,7 @@ fn hud_metrics_system(
     mut text_query: Query<&mut Text, With<HUDMetricsText>>,
 ) {
     if let Some(prediction_metrics) = prediction_metrics {
-        if let Ok(mut text) = text_query.get_single_mut() {
+        if let Ok(mut text) = text_query.single_mut() {
             if let Some(fps) = diagnostics.get(&FrameTimeDiagnosticsPlugin::FPS) {
                 text.0 = format!(
                     "FPS: {}\nRollbacks: {}\nRollback Ticks: {}",
@@ -144,7 +144,7 @@ fn camera_follow_system(
     >,
 ) {
     if let (Ok(window), Ok((mut camera_transform, camera_global_transform, camera))) =
-        (window.get_single(), camera.get_single_mut())
+        (window.single(), camera.single_mut())
     {
         if let Some(mouse_position) = window.cursor_position() {
             if let Ok(mouse_ray) =
@@ -155,7 +155,7 @@ fn camera_follow_system(
                 {
                     let mouse_world_position = mouse_ray.origin + (mouse_ray.direction * distance);
 
-                    if let Ok(character_transform) = character.get_single() {
+                    if let Ok(character_transform) = character.single() {
                         let char_pos = character_transform.translation();
 
                         // First calculate the midpoint between character and mouse

@@ -1,4 +1,4 @@
-use bevy::{prelude::*, utils::HashMap};
+use bevy::{platform::collections::HashMap, prelude::*};
 use bevy_renet2::{netcode::NetcodeServerPlugin, prelude::*};
 
 use crate::{

@@ -71,7 +71,7 @@ fn enemy_move_and_attack_system(
         .map(|p| p.translation)
         .collect::<Vec<_>>();
 
-    if let Ok(managed_nav_mesh) = navmesh.get_single() {
+    if let Ok(managed_nav_mesh) = navmesh.single() {
         if let Some(navmesh) = navmeshes.get(managed_nav_mesh.id()) {
             for (bot_transform, mut bot_wish_direction) in bots.iter_mut() {
                 if let Some(closest_enemy_translation) = all_player_characters

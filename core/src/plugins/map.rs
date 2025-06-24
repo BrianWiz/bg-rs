@@ -1,12 +1,7 @@
 use std::time::Duration;
 
-use avian3d::prelude::{Collider, ColliderConstructor, PhysicsDebugPlugin};
-use bevy::{
-    color::palettes,
-    ecs::{component::ComponentId, world::DeferredWorld},
-    prelude::*,
-    time::common_conditions::on_timer,
-};
+use avian3d::prelude::Collider;
+use bevy::{color::palettes, prelude::*, time::common_conditions::on_timer};
 use bevy_trenchbroom::prelude::*;
 use vleue_navigator::prelude::*;
 
@@ -22,16 +17,14 @@ pub struct MapPlugin;
 
 impl Plugin for MapPlugin {
     fn build(&self, app: &mut App) {
-        app.register_type::<StaticObstacle>();
+        app.register_type::<Worldspawn>();
 
         app.init_asset::<NavMesh>();
         app.add_plugins(VleueNavigatorPlugin);
-        app.add_plugins(NavmeshUpdaterPlugin::<Collider, StaticObstacle>::default());
+        app.add_plugins(NavmeshUpdaterPlugin::<Collider, Worldspawn>::default());
 
-        app.add_plugins(TrenchBroomPlugin(
-            TrenchBroomConfig::new("brutal_grounds")
-                .no_bsp_lighting(true)
-                .assets_path("../assets"), // .register_class::<Worldspawn>(),
+        app.add_plugins(TrenchBroomPlugins(
+            TrenchBroomConfig::new("brutal_grounds").assets_path("../assets"),
         ));
 
         //app.add_plugins(PhysicsDebugPlugin::default());
@@ -44,10 +37,6 @@ impl Plugin for MapPlugin {
         );
     }
 }
-
-#[derive(Component, Reflect)]
-#[reflect(Component)]
-struct StaticObstacle;
 
 fn spawn_test_map(
     mut commands: Commands,
@@ -68,42 +57,6 @@ fn spawn_test_map(
             .with_translation(Vec3::new(-10.0, 10.0, -10.0))
             .looking_at(Vec3::ZERO, Vec3::Y),
     ));
-
-    // // spawn a floor
-    // commands.spawn((
-    //     Mesh3d(meshes.add(Cuboid::new(100.0, 1.0, 100.0))),
-    //     MeshMaterial3d(materials.add(Color::srgb(0.1, 0.1, 0.1))),
-    //     Transform::default().with_translation(Vec3::new(0.0, -0.5, 0.0)),
-    //     ColliderConstructor::ConvexHullFromMesh,
-    //     Obstacle,
-    // ));
-
-    // // spawn a pillar
-    // commands.spawn((
-    //     Mesh3d(meshes.add(Cuboid::new(1.0, 1.0, 1.0))),
-    //     MeshMaterial3d(materials.add(Color::srgb(0.5, 0.5, 0.5))),
-    //     Transform::default().with_translation(Vec3::new(5.0, 0.5, 5.0)),
-    //     ColliderConstructor::ConvexHullFromMesh,
-    //     Obstacle,
-    // ));
-
-    // // spawn another pillar
-    // commands.spawn((
-    //     Mesh3d(meshes.add(Cuboid::new(1.0, 1.0, 1.0))),
-    //     MeshMaterial3d(materials.add(Color::srgb(0.5, 0.5, 0.5))),
-    //     Transform::default().with_translation(Vec3::new(-5.0, 0.5, 5.0)),
-    //     ColliderConstructor::ConvexHullFromMesh,
-    //     Obstacle,
-    // ));
-
-    // // spawn a longer wall
-    // commands.spawn((
-    //     Mesh3d(meshes.add(Cuboid::new(10.0, 1.0, 1.0))),
-    //     MeshMaterial3d(materials.add(Color::srgb(0.5, 0.5, 0.5))),
-    //     Transform::default().with_translation(Vec3::new(0.0, 0.5, -5.0)),
-    //     ColliderConstructor::ConvexHullFromMesh,
-    //     Obstacle,
-    // ));
 
     // spawn a navmesh
     commands.spawn((
@@ -144,12 +97,6 @@ fn view_navmesh_system(
 }
 
 #[derive(SolidClass, Component, Reflect)]
-#[reflect(Component)]
-#[geometry(GeometryProvider::new().smooth_by_default_angle().convex_collider())]
-#[component(on_add = Self::on_add)]
+#[reflect(QuakeClass, Component)]
+#[spawn_hooks(SpawnHooks::new().smooth_by_default_angle().convex_collider())]
 pub struct Worldspawn;
-impl Worldspawn {
-    pub fn on_add(mut world: DeferredWorld, entity: Entity, _id: ComponentId) {
-        world.commands().entity(entity).insert(StaticObstacle);
-    }
-}
